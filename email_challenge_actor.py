@@ -22,6 +22,8 @@ class EmailChallengeActor(ChallengeActor):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
         self.storage = requests_storage
+        self.ca_name = parse_certificate(self.ca_cert_data).name[:-5]
+        
     
     def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         print(len(request.selected_challenge))
@@ -38,10 +40,10 @@ class EmailChallengeActor(ChallengeActor):
         
         email = bytes(cert_state.iden_value).decode("utf-8")
         secret = "2345"
-        cert_name = parse_certificate(cert_state.csr).name
+        cert_name = parse_certificate(cert_state.csr).name        
+        # print(f'email = {email}')
         
-        print(f'email = {email}')
-        SendingEmail(email, secret, '/ndn/CA', cert_name)
+        SendingEmail(email, secret, Name.to_str(self.ca_name) + '/CA', cert_name)
         
         cert_state.auth_key = "code".encode()
         cert_state.auth_value = secret.encode()
@@ -68,7 +70,7 @@ class EmailChallengeActor(ChallengeActor):
                 response = ChallengeResponse()
                 response.status = STATUS_PENDING
                 response.issued_cert_name = Name.encode(issued_cert_name)
-                response.forwarding_hint = Name.to_bytes('/ndn/CA')
+                response.forwarding_hint = Name.to_bytes(Name(self.ca_name).append('CA'))
 
                 self.storage[cert_state.id] = cert_state
                 return response, None

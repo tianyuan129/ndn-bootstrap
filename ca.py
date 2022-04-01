@@ -40,16 +40,18 @@ logging.basicConfig(format='[{asctime}]{levelname}:{message}',
 
 app = NDNApp()
 requests = {}
+cache = {}
+
 pib_file = os.path.join(os.getcwd(), 'pib.db')
 tpm_dir = os.path.join(os.getcwd(), 'privKeys')
 KeychainSqlite3.initialize(pib_file, 'tpm-file', tpm_dir)
 keychain = KeychainSqlite3(pib_file, TpmFile(tpm_dir))
-ca_id = keychain.touch_identity('/ndn')
+ca_prefix = '/ndn'
+ca_id = keychain.touch_identity(ca_prefix)
 ca_cert = ca_id.default_key().default_cert().data
 ca_cert_data = parse_certificate(ca_cert)
-    
-@app.route('/ndn/CA/NEW')
-def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
+
+def on_new_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
     print(f'>> I: {Name.to_str(name)}, {param}')
     request = NewRequest.parse(_app_param)
     ecdh = ECDH()
@@ -63,7 +65,7 @@ def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[Bin
     response.request_id = urandom(8)
     response.challenges.append("email".encode())
     
-    app.put_data(name, content=response.encode(), freshness_period=10000, identity='/ndn')
+    app.put_data(name, content=response.encode(), freshness_period=10000, identity=ca_prefix)
     
     cert_state = CertState()
     ecdh.encrypt(bytes(pub), response.salt, response.request_id)
@@ -74,8 +76,7 @@ def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[Bin
     requests[response.request_id] = cert_state
     print(f'Request ID: {response.request_id.hex()}')
     
-@app.route('/ndn/CA/CHALLENGE')
-def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
+def on_challenge_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
     print(f'>> I: {Name.to_str(name)}, {param}')
     message_in = EncryptedMessage.parse(_app_param)
     request_id = name[-4][-8:]
@@ -110,13 +111,32 @@ def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[Bin
         message_out, iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), cert_state.iv_counter, 
                                                         bytes(cert_state.id), plaintext)
         cert_state.iv_counter = iv_counter
-        app.put_data(name, content=message_out.encode(), freshness_period=10000, identity='/ndn')
+        app.put_data(name, content=message_out.encode(), freshness_period=10000, identity=ca_prefix)
+        
+        if cert_state.issued_cert is not None:
+            issued_name = parse_certificate(cert_state.issued_cert)
+            cache[Name.to_bytes(issued_name.name)] = cert_state.issued_cert
     else:
         assert err is not None
-        app.put_data(name, content=err.encode(), freshness_period=10000, identity='/ndn')
+        app.put_data(name, content=err.encode(), freshness_period=10000, identity=ca_prefix)
+
+# I don't know how to register a pure route, so let's stick with this
+@app.route(ca_prefix)
+def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
+    # dispatch to corresponding handlers
+    if Name.is_prefix(ca_prefix + '/CA/NEW', name):
+        on_new_interest(name, param, _app_param)
+        return
+    if Name.is_prefix(ca_prefix + '/CA/CHALLENGE', name):
+        on_challenge_interest(name, param, _app_param)
+        return
+    
+    # check whether can respond from cert cache
+    try:
+        cache[Name.to_bytes(name)]
+    except KeyError:
+        return
+    app.put_raw_packet(cache[Name.to_bytes(name)])
 
 if __name__ == '__main__':
-    ca_id = keychain.touch_identity('/ndn')
-    ca_cert = ca_id.default_key().default_cert().data
-    ca_cert_data = parse_certificate(ca_cert)
     app.run_forever()
