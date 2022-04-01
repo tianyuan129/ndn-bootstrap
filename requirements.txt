@@ -9,3 +9,4 @@ ecdsa>=0.14.1
 aiohttp>=3.6.2
 aiohttp-jinja2>=1.2.0
 python-ndn>=0.2b1
+PyYAML >= 5.1.2

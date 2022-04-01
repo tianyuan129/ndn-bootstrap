@@ -8,21 +8,21 @@ from math import floor
 from ndn.encoding import Name
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 
-from ndncert_proto import *
-from ecdh import *
+from proto.ndncert_proto import *
+from util.ndncert_crypto import *
 from ca_storage import *
-from sending_email import *
+from util.sending_email import *
 
 from Cryptodome.Cipher import AES
 
-from challenge_actor import ChallengeActor
+from challenge.challenge_actor import ChallengeActor
 
 class EmailChallengeActor(ChallengeActor):
     def __init__(self, ca_cert_data, keychain, requests_storage: Dict[bytes, Any]):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
         self.storage = requests_storage
-        self.ca_name = parse_certificate(self.ca_cert_data).name[:-5]
+        self.ca_name = self.ca_cert_data.name[:-5]
         
     
     def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
@@ -70,7 +70,9 @@ class EmailChallengeActor(ChallengeActor):
                 response = ChallengeResponse()
                 response.status = STATUS_PENDING
                 response.issued_cert_name = Name.encode(issued_cert_name)
-                response.forwarding_hint = Name.to_bytes(Name(self.ca_name).append('CA'))
+                ca_prefix = self.ca_name
+                ca_prefix.append('CA')
+                response.forwarding_hint = Name.to_bytes(ca_prefix)
 
                 self.storage[cert_state.id] = cert_state
                 return response, None

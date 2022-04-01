@@ -1,7 +1,7 @@
 from typing import Tuple, Dict, Any
 from abc import ABC, abstractmethod
 
-from ndncert_proto import *
+from proto.ndncert_proto import *
 from ca_storage import *
 
 

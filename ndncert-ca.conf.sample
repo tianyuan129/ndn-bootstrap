@@ -1,0 +1,39 @@
+---
+prefix_config:
+  # the CA's identity prefix
+  prefix_name: '/ndn'
+
+auth_config:
+  # name acceptance policy for the CA
+  email:
+    mail_conf: 'ndncert-ca-mail.conf'
+    # hard_enforce: alice@gmail.com -> /ndn/alice@gmail.com
+    # address_reverted: alice@gmail.com -> /ndn/com/gmail/alice
+    accept_policy: hard_enforce
+
+# not supported yet
+db_config:
+  # choose one among sqlite3, leveldb, and mongodb
+  db_type: 'sqlite3'
+  
+  # only the chosen db's config will be read
+  sqlite3:
+    'path': '~/.ndn/ndncert-ca-python/sqlite3.db'   # filepath to sqlite3 database file
+  leveldb:
+    'dir': '~/.ndn/ndncert-ca-python/leveldb/'      # directory to leveldb database files
+  mongodb:
+    'db': 'repo'
+    'collection': 'data'
+
+tcp_bulk_insert:
+  addr: '0.0.0.0'
+  port: '7376'
+  # when register_root is False, whether packets inserted via TCP triggers prefix registration
+  register_prefix: True 
+
+
+logging_config:
+  # one of 'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'
+  level: 'INFO'
+  # absolute path to log file. If not given, logs to stdout
+  # file: 'ca.log'

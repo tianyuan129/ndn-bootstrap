@@ -1,5 +1,4 @@
-from ecdh import *
-from ndncert_proto import *
+from proto.ndncert_proto import *
 
 TLV_PLACEHOLDER = 1
 

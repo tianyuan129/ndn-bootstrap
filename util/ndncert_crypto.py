@@ -1,9 +1,17 @@
+from typing import Tuple
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import load_pem_private_key,load_pem_public_key
 from ecdsa import SigningKey, VerifyingKey, NIST256p
+from Cryptodome.Cipher import AES
+
+from proto.ndncert_proto import *
+
+from os import urandom
+from math import floor
 
 class ECDH:
     def __init__(self):
@@ -31,3 +39,27 @@ class ECDH:
             info = info,
             backend = default_backend()
         ).derive(shared_key)
+        
+def gen_encrypted_message(aes_key: bytes, iv_counter: int, associated: bytes, plaintext: bytes) -> Tuple[EncryptedMessage, int]:
+    # this will auto increment the iv counter
+     
+    if iv_counter is None:
+        iv_counter = 0
+
+    iv_counter = iv_counter + floor((len(plaintext) + 15) / 16)
+    iv = urandom(8) + iv_counter.to_bytes(4, 'big')
+    cipher = AES.new(aes_key, AES.MODE_GCM, nonce = iv)
+    cipher.update(associated)
+    ciphertext, tag = cipher.encrypt_and_digest(plaintext)
+    
+    message_out = EncryptedMessage()
+    message_out.iv = iv
+    message_out.tag = tag
+    message_out.payload = ciphertext
+    return message_out, iv_counter
+
+def get_encrypted_message(aes_key: bytes, associated: bytes, message_in: EncryptedMessage) -> bytes:
+    cipher = AES.new(aes_key, AES.MODE_GCM, nonce = message_in.iv)
+    cipher.update(associated)
+    # todo: enforce the iv counter checking
+    return cipher.decrypt_and_verify(message_in.payload, message_in.tag)
