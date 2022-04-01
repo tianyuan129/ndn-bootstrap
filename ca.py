@@ -15,7 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # -----------------------------------------------------------------------------
+from distutils import errors
 from email import message
+from typing import Tuple
 from datetime import datetime
 from typing import Optional
 from urllib import response
@@ -49,7 +51,7 @@ ca_id = keychain.touch_identity('/ndn')
 ca_cert = ca_id.default_key().default_cert().data
 ca_cert_data = parse_certificate(ca_cert)
     
-def actions_before_challenge(message_in: EncryptedMessage, cert_state: CertState) -> EncryptedMessage:
+def actions_before_challenge(message_in: EncryptedMessage, cert_state: CertState) -> Tuple[EncryptedMessage, ErrorMessage]:
     cipher = AES.new(cert_state.aes_key, AES.MODE_GCM, nonce = message_in.iv)
     cipher.update(cert_state.id)
     payload = cipher.decrypt_and_verify(message_in.payload, message_in.tag)
@@ -61,7 +63,7 @@ def actions_before_challenge(message_in: EncryptedMessage, cert_state: CertState
     response = ChallengeResponse()
     response.status = STATUS_CHALLENGE
     response.challenge_status = CHALLENGE_STATUS_NEED_CODE.encode()
-    response.remaining_tries = 3
+    response.remaining_tries = 1
     response.remaining_time = 300
     iv_random = urandom(8)
     iv_counter = int.from_bytes(message_in.iv[-4:], 'big')
@@ -89,9 +91,9 @@ def actions_before_challenge(message_in: EncryptedMessage, cert_state: CertState
     cert_state.iv_counter = iv_counter
     
     requests[cert_state.id] = cert_state
-    return message_out
+    return message_out, None
 
-def actions_continue_challenge(message_in: EncryptedMessage, cert_state: CertState) -> EncryptedMessage:
+def actions_continue_challenge(message_in: EncryptedMessage, cert_state: CertState) -> Tuple[EncryptedMessage, ErrorMessage]:
     cipher = AES.new(cert_state.aes_key, AES.MODE_GCM, nonce = message_in.iv)
     cipher.update(cert_state.id)
     payload = cipher.decrypt_and_verify(message_in.payload, message_in.tag)
@@ -103,7 +105,7 @@ def actions_continue_challenge(message_in: EncryptedMessage, cert_state: CertSta
     if cert_state.auth_key == request.parameter_key:
         if cert_state.auth_value == request.parameter_value:
             print(f'Success, should issue certificate')
-            cert_state.status = STATUS_PENDING
+            cert_state.status = STATUS_CHALLENGE
             csr_data = parse_certificate(cert_state.csr)
             signer = keychain.get_signer({'cert': ca_cert_data.name})
             issued_cert_name, issued_cert = derive_cert(csr_data.name[:-3], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
@@ -126,9 +128,20 @@ def actions_continue_challenge(message_in: EncryptedMessage, cert_state: CertSta
             message_out.payload = ciphertext
             
             requests[cert_state.id] = cert_state
-            return message_out
-    return None
-
+            return message_out, None
+        else:
+            print(f'Wrong, fail immediately')
+            errs = ErrorMessage()
+            errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
+            errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
+            return None, errs
+    else:
+        errs = ErrorMessage()
+        errs.code = ERROR_INVALID_PARAMTERS[0]
+        errs.info = ERROR_INVALID_PARAMTERS[1].encode()
+        return None, errs
+            
+            
 # map the inputs to the function blocks
 actions = {STATUS_BEFORE_CHALLENGE : actions_before_challenge,
            STATUS_CHALLENGE : actions_continue_challenge
@@ -174,8 +187,12 @@ def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[Bin
         return
     cert_state = requests[request_id]
     
-    encrypted_message = actions[cert_state.status](message_in, cert_state)
-    app.put_data(name, content=encrypted_message.encode(), freshness_period=10000, identity='/ndn')
+    encrypted_message, err = actions[cert_state.status](message_in, cert_state)
+    if encrypted_message is not None:
+        app.put_data(name, content=encrypted_message.encode(), freshness_period=10000, identity='/ndn')
+    else:
+        assert err is not None
+        app.put_data(name, content=err.encode(), freshness_period=10000, identity='/ndn')
 
 if __name__ == '__main__':
     ca_id = keychain.touch_identity('/ndn')
