@@ -114,5 +114,24 @@ class ChallengeResponse(TlvModel):
     remaining_tries = UintField(TLV_REMAINING_TRIES_TYPE)
     remaining_time = UintField(TLV_REMAINING_TIME_TYPE)
     # parameters = RepeatedField(Parameter)
-    issued_cert_name = ModelField(TLV_ISSUED_CERT_NAME_TYPE, NameField)
-    forwarding_hint = ModelField(TypeNumber.FORWARDING_HINT, NameField)
+    issued_cert_name = BytesField(TLV_ISSUED_CERT_NAME_TYPE)
+    forwarding_hint = BytesField(TypeNumber.FORWARDING_HINT)
+
+
+
+# 0: STATUS_BEFORE_CHALLENGE, the requester has not selected a challenge.
+# 1: STATUS_CHALLENGE, the challenge is in progress.
+# 2: STATUS_PENDING, the challenge is finished, but not yet approved by the CA.
+# 3: STATUS_SUCCESS, the challenge is finished, and the CA has approved the result.
+# 4: STATUS_FAILURE, the challenge has failed.
+STATUS_BEFORE_CHALLENGE = 0
+STATUS_CHALLENGE = 1
+STATUS_PENDING = 2
+STATUS_SUCCESS = 3
+STATUS_FAILURE = 4
+
+
+CHALLENGE_STATUS_NEED_CODE = "need-code";
+CHALLENGE_STATUS_WRONG_CODE = "wrong-code";
+CHALLENGE_STATUS_PARAMETER_KEY_EMAIL = "email";
+CHALLENGE_STATUS_PARAMETER_KEY_CODE = "code";
