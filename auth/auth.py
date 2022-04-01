@@ -5,7 +5,7 @@ from proto.ndncert_proto import *
 from ca_storage import *
 
 
-class ChallengeActor:
+class Authenticator:
     @abstractmethod
     def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         pass

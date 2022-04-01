@@ -28,7 +28,7 @@ from ndn.security import KeychainSqlite3, TpmFile
 from proto.ndncert_proto import *
 from util.ndncert_crypto import *
 
-from challenge.email_challenge_actor import *
+from auth.email_auth import *
 
 from ca_storage import *
 
@@ -43,16 +43,17 @@ class Ca(object):
         #todo: customize the storage type
         self.requests = {}
         self.cache = {}
-
+        self.config = config
+        self.ca_prefix = self.config['prefix_config']['prefix_name']
+                
         pib_file = os.path.join(os.getcwd(), 'pib.db')
         tpm_dir = os.path.join(os.getcwd(), 'privKeys')
         KeychainSqlite3.initialize(pib_file, 'tpm-file', tpm_dir)
         self.keychain = KeychainSqlite3(pib_file, TpmFile(tpm_dir))
-        self.ca_prefix = '/ndn'
         ca_id = self.keychain.touch_identity(self.ca_prefix)
         ca_cert = ca_id.default_key().default_cert().data
         self.ca_cert_data = parse_certificate(ca_cert)
-
+        
     def on_new_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
         print(f'>> I: {Name.to_str(name)}, {param}')
         request = NewRequest.parse(_app_param)
@@ -65,8 +66,9 @@ class Ca(object):
         response.ecdh_pub = ecdh.pub_key_encoded
         response.salt = urandom(32)
         response.request_id = urandom(8)
-        response.challenges.append("email".encode())
-        
+        for auth_method in self.config['auth_config']:
+            response.challenges.append(str(auth_method).encode())
+                
         self.app.put_data(name, content=response.encode(), freshness_period=10000, identity=self.ca_prefix)
         
         cert_state = CertState()
@@ -97,7 +99,17 @@ class Ca(object):
         print(bytes(request.selected_challenge).decode('utf-8'))
         
         challenge_type = bytes(request.selected_challenge).decode('utf-8')
-        challenge_str = challenge_type.capitalize() + 'ChallengeActor'
+        
+        # if challenge not available
+        if not challenge_type in self.config['auth_config']:
+            print(f'challenge not available')
+            errs = ErrorMessage()
+            errs.code = ERROR_INVALID_PARAMTERS[0]
+            errs.info = ERROR_INVALID_PARAMTERS[1].encode()
+            self.app.put_data(name, content=err.encode(), freshness_period=10000, identity=self.ca_prefix)
+            return
+        
+        challenge_str = challenge_type.capitalize() + 'Authenticator'
         # cast the corresponding challenge actor
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do

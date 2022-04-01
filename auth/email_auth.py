@@ -15,9 +15,9 @@ from util.sending_email import *
 
 from Cryptodome.Cipher import AES
 
-from challenge.challenge_actor import ChallengeActor
+from auth.auth import Authenticator
 
-class EmailChallengeActor(ChallengeActor):
+class EmailAuthenticator(Authenticator):
     def __init__(self, ca_cert_data, keychain, requests_storage: Dict[bytes, Any]):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
