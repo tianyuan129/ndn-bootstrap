@@ -15,29 +15,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # -----------------------------------------------------------------------------
-from distutils import errors
-from email import message
-from typing import Tuple
-from datetime import datetime
 from typing import Optional
-from urllib import response
 
-import logging, os
+import logging, os, sys
 from os import urandom
-from math import floor
 
 from ndn.app import NDNApp
-from ndn.encoding import Name, InterestParam, BinaryStr, FormalName, MetaInfo
-from ndn.app_support.security_v2 import parse_certificate, derive_cert
+from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
+from ndn.app_support.security_v2 import parse_certificate
 from ndn.security import KeychainSqlite3, TpmFile
 
 from ndncert_proto import *
-from ecdh import *
-from ca_storage import *
-from sending_email import *
+from ndncert_crypto import *
 
-from Cryptodome.Cipher import AES
-from Cryptodome.Util.Padding import pad, unpad
+from email_challenge_actor import *
+
+from ca_storage import *
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
@@ -55,113 +48,6 @@ ca_id = keychain.touch_identity('/ndn')
 ca_cert = ca_id.default_key().default_cert().data
 ca_cert_data = parse_certificate(ca_cert)
     
-def actions_before_challenge(message_in: EncryptedMessage, cert_state: CertState) -> Tuple[EncryptedMessage, ErrorMessage]:
-    cipher = AES.new(cert_state.aes_key, AES.MODE_GCM, nonce = message_in.iv)
-    cipher.update(cert_state.id)
-    payload = cipher.decrypt_and_verify(message_in.payload, message_in.tag)
-    request = ChallengeRequest.parse(payload)
-    
-    print(len(request.selected_challenge))
-    print(bytes(request.selected_challenge).decode('utf-8'))
-    cert_state.auth_mean = request.selected_challenge
-    cert_state.iden_key = request.parameter_key
-    cert_state.iden_value = request.parameter_value
-    
-    response = ChallengeResponse()
-    response.status = STATUS_CHALLENGE
-    response.challenge_status = CHALLENGE_STATUS_NEED_CODE.encode()
-    response.remaining_tries = 1
-    response.remaining_time = 300
-    iv_random = urandom(8)
-    iv_counter = int.from_bytes(message_in.iv[-4:], 'big')
-    print(f'iv_counter: {iv_counter}')
-    
-    plaintext = response.encode()
-    iv_counter = iv_counter + floor((len(plaintext) + 15) / 16)
-    
-    print(f'aes key: {cert_state.aes_key.hex()}')
-    iv = bytes(iv_random) + iv_counter.to_bytes(4, 'big')
-    print(f'iv: {iv.hex()}')
-        
-    cipher = AES.new(bytes(cert_state.aes_key), AES.MODE_GCM, nonce = bytes(iv_random) + iv_counter.to_bytes(4, 'big'))
-    cipher.update(bytes(cert_state.id))
-    ciphertext, tag = cipher.encrypt_and_digest(plaintext)
-    
-    message_out = EncryptedMessage()
-    message_out.iv = bytes(iv_random) + iv_counter.to_bytes(4, 'big')
-    message_out.tag = tag
-    message_out.payload = ciphertext
-    
-    email = bytes(cert_state.iden_value).decode("utf-8")
-    secret = "2345"
-    cert_name =  parse_certificate(cert_state.csr).name
-    
-    print(f'email = {email}')
-    SendingEmail(email, secret, '/ndn/CA', cert_name)
-    
-    cert_state.auth_key = "code".encode()
-    cert_state.auth_value = secret.encode()
-    cert_state.status = STATUS_CHALLENGE
-    cert_state.iv_counter = iv_counter
-    
-    requests[cert_state.id] = cert_state
-    return message_out, None
-
-def actions_continue_challenge(message_in: EncryptedMessage, cert_state: CertState) -> Tuple[EncryptedMessage, ErrorMessage]:
-    cipher = AES.new(cert_state.aes_key, AES.MODE_GCM, nonce = message_in.iv)
-    cipher.update(cert_state.id)
-    payload = cipher.decrypt_and_verify(message_in.payload, message_in.tag)
-    request = ChallengeRequest.parse(payload)
-    
-    print(f'key = {bytes(request.parameter_key).decode("utf-8") }')
-    print(f'value = {bytes(request.parameter_value).decode("utf-8") }')
-    
-    if cert_state.auth_key == request.parameter_key:
-        if cert_state.auth_value == request.parameter_value:
-            print(f'Success, should issue certificate')
-            cert_state.status = STATUS_CHALLENGE
-            csr_data = parse_certificate(cert_state.csr)
-            signer = keychain.get_signer({'cert': ca_cert_data.name})
-            issued_cert_name, issued_cert = derive_cert(csr_data.name[:-3], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
-            cert_state.issued_cert = issued_cert
-            
-            response = ChallengeResponse()
-            response.status = STATUS_PENDING
-            response.issued_cert_name = Name.encode(issued_cert_name)
-            response.forwarding_hint = Name.to_bytes('/ndn/CA')
-            plaintext = response.encode()
-            cert_state.iv_counter = cert_state.iv_counter + floor((len(plaintext) + 15) / 16)
-            
-            cipher = AES.new(bytes(cert_state.aes_key), AES.MODE_GCM, nonce = urandom(8) + cert_state.iv_counter.to_bytes(4, 'big'))
-            cipher.update(bytes(cert_state.id))
-            ciphertext, tag = cipher.encrypt_and_digest(plaintext)
-            
-            message_out = EncryptedMessage()
-            message_out.iv = urandom(8) + cert_state.iv_counter.to_bytes(4, 'big')
-            message_out.tag = tag
-            message_out.payload = ciphertext
-            
-            requests[cert_state.id] = cert_state
-            return message_out, None
-        else:
-            print(f'Wrong, fail immediately')
-            errs = ErrorMessage()
-            errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
-            errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
-            return None, errs
-    else:
-        errs = ErrorMessage()
-        errs.code = ERROR_INVALID_PARAMTERS[0]
-        errs.info = ERROR_INVALID_PARAMTERS[1].encode()
-        return None, errs
-            
-            
-# map the inputs to the function blocks
-actions = {STATUS_BEFORE_CHALLENGE : actions_before_challenge,
-           STATUS_CHALLENGE : actions_continue_challenge
-}
-
-
 @app.route('/ndn/CA/NEW')
 def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
     print(f'>> I: {Name.to_str(name)}, {param}')
@@ -201,9 +87,30 @@ def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[Bin
         return
     cert_state = requests[request_id]
     
-    encrypted_message, err = actions[cert_state.status](message_in, cert_state)
-    if encrypted_message is not None:
-        app.put_data(name, content=encrypted_message.encode(), freshness_period=10000, identity='/ndn')
+    payload = get_encrypted_message(bytes(cert_state.aes_key), bytes(cert_state.id), message_in)
+    request = ChallengeRequest.parse(payload)
+    
+    print(len(request.selected_challenge))
+    print(bytes(request.selected_challenge).decode('utf-8'))
+    
+    challenge_type = bytes(request.selected_challenge).decode('utf-8')
+    challenge_str = challenge_type.capitalize() + 'ChallengeActor'
+    # cast the corresponding challenge actor
+    actor = getattr(sys.modules[__name__], challenge_str)
+    # definitely not the right way to do
+    actor.__init__(actor, ca_cert_data, keychain, requests)
+    response, err = actor.actions[cert_state.status](actor, request, cert_state)
+
+    cert_state.auth_mean = request.selected_challenge
+    cert_state.iden_key = request.parameter_key
+    cert_state.iden_value = request.parameter_value
+    
+    if response is not None:
+        plaintext = response.encode()
+        message_out, iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), cert_state.iv_counter, 
+                                                        bytes(cert_state.id), plaintext)
+        cert_state.iv_counter = iv_counter
+        app.put_data(name, content=message_out.encode(), freshness_period=10000, identity='/ndn')
     else:
         assert err is not None
         app.put_data(name, content=err.encode(), freshness_period=10000, identity='/ndn')
