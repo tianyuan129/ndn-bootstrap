@@ -21,16 +21,20 @@ from typing import Tuple
 from datetime import datetime
 from typing import Optional
 from urllib import response
+
+import logging, os
+from os import urandom
+from math import floor
+
 from ndn.app import NDNApp
 from ndn.encoding import Name, InterestParam, BinaryStr, FormalName, MetaInfo
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.security import KeychainSqlite3, TpmFile
+
 from ndncert_proto import *
 from ecdh import *
 from ca_storage import *
-import logging, os
-from os import urandom
-from math import floor
+from sending_email import *
 
 from Cryptodome.Cipher import AES
 from Cryptodome.Util.Padding import pad, unpad
@@ -59,6 +63,9 @@ def actions_before_challenge(message_in: EncryptedMessage, cert_state: CertState
     
     print(len(request.selected_challenge))
     print(bytes(request.selected_challenge).decode('utf-8'))
+    cert_state.auth_mean = request.selected_challenge
+    cert_state.iden_key = request.parameter_key
+    cert_state.iden_value = request.parameter_value
     
     response = ChallengeResponse()
     response.status = STATUS_CHALLENGE
@@ -85,8 +92,15 @@ def actions_before_challenge(message_in: EncryptedMessage, cert_state: CertState
     message_out.tag = tag
     message_out.payload = ciphertext
     
+    email = bytes(cert_state.iden_value).decode("utf-8")
+    secret = "2345"
+    cert_name =  parse_certificate(cert_state.csr).name
+    
+    print(f'email = {email}')
+    SendingEmail(email, secret, '/ndn/CA', cert_name)
+    
     cert_state.auth_key = "code".encode()
-    cert_state.auth_value = "2345".encode()
+    cert_state.auth_value = secret.encode()
     cert_state.status = STATUS_CHALLENGE
     cert_state.iv_counter = iv_counter
     
