@@ -113,5 +113,6 @@ class ChallengeResponse(TlvModel):
     challenge_status = BytesField(TLV_CHALLENGE_STATUS_TYPE)
     remaining_tries = UintField(TLV_REMAINING_TRIES_TYPE)
     remaining_time = UintField(TLV_REMAINING_TIME_TYPE)
+    # parameters = RepeatedField(Parameter)
     issued_cert_name = ModelField(TLV_ISSUED_CERT_NAME_TYPE, NameField)
     forwarding_hint = ModelField(TypeNumber.FORWARDING_HINT, NameField)
