@@ -1,3 +1,4 @@
+from ast import operator
 from typing import Tuple, Dict, Any
 from datetime import datetime
 
@@ -108,19 +109,24 @@ class EmailAuthenticator(Authenticator):
         if checker.check(cert_name, translated_name):
             return True
         else:
-            identity_fac = 'Identity Factor: ' + bytes(cert_state.iden_key).decode('utf-8')
-            identity_val = ', Identity Value: ' + bytes(cert_state.iden_value).decode('utf-8')
-            
-            fallback_policy = accept_policy['fallback']
-            if not fallback_policy['override']:
-                SendingEmail(fallback_policy['operator_email'], Name.to_str(self.ca_name) + '/CA', 
-                             Name.to_str(cert_name), identity_fac + identity_val, 'auth/operator-email.conf')
+            if accept_policy['full_lvs']:
+                return False
             else:
-                if fallback_policy['override_func'] == 'autofail':
-                    return False
+                identity_fac = 'Identity Factor: ' + bytes(cert_state.iden_key).decode('utf-8')
+                identity_val = ', Identity Value: ' + bytes(cert_state.iden_value).decode('utf-8')
+                
+                fallback_policy = accept_policy['fallback']
+                if not fallback_policy['override']:
+                    operator_email = fallback_policy['operator_email']
+                    print(f'Sending email to the operator {operator_email}')
+                    SendingEmail(operator_email, Name.to_str(self.ca_name) + '/CA', 
+                                 Name.to_str(cert_name), identity_fac + identity_val, 'auth/operator-email.conf')
                 else:
-                    #todo: reflect to corresponding fallback policy
-                    pass
+                    if fallback_policy['override_func'] == 'autofail':
+                        return False
+                    else:
+                        #todo: reflect to corresponding fallback policy
+                        pass
             return False
                 
     # map the inputs to the function blocks
