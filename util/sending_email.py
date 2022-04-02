@@ -3,13 +3,14 @@ import socket
 from configparser import ConfigParser
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Optional
 
 
-def SendingEmail(email: str, secret: str, ca_name: str, cert_name: str):
+def SendingEmail(email: str, param1: str, param2: str, param3: str, config: str):
     socket.setdefaulttimeout(10)
     # open config
     confParser = ConfigParser()
-    confParser.read('ndncert-mail.conf')
+    confParser.read(config)
 
     # read smtp settings
     encrypt_mode = confParser.get('ndncert_smtp_settings', "ENCRYPT_MODE")
@@ -21,8 +22,8 @@ def SendingEmail(email: str, secret: str, ca_name: str, cert_name: str):
     # read email settings
     msg_from = confParser.get('ndncert_email_settings', 'MAIL_FROM')
     subject = confParser.get('ndncert_email_settings', 'SUBJECT')
-    text = confParser.get('ndncert_email_settings', 'TEXT_TEMPLATE').format(secret, ca_name, cert_name)
-    html = confParser.get('ndncert_email_settings', 'HTML_TEMPLATE').format(secret, ca_name, cert_name)
+    text = confParser.get('ndncert_email_settings', 'TEXT_TEMPLATE').format(param1, param2, param3)
+    html = confParser.get('ndncert_email_settings', 'HTML_TEMPLATE').format(param1, param2, param3)
 
     # form email message
     msg = MIMEMultipart('alternative')

@@ -28,7 +28,7 @@ from ndn.security import KeychainSqlite3, TpmFile
 from proto.ndncert_proto import *
 from util.ndncert_crypto import *
 
-from auth.email_auth import *
+from auth import *
 
 from ca_storage import *
 
@@ -94,10 +94,6 @@ class Ca(object):
         
         payload = get_encrypted_message(bytes(cert_state.aes_key), bytes(cert_state.id), message_in)
         request = ChallengeRequest.parse(payload)
-        
-        print(len(request.selected_challenge))
-        print(bytes(request.selected_challenge).decode('utf-8'))
-        
         challenge_type = bytes(request.selected_challenge).decode('utf-8')
         
         # if challenge not available
@@ -113,7 +109,7 @@ class Ca(object):
         # cast the corresponding challenge actor
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do
-        actor.__init__(actor, self.ca_cert_data, self.keychain, self.requests)
+        actor.__init__(actor, self.ca_cert_data, self.keychain, self.requests, self.config)
         response, err = actor.actions[cert_state.status](actor, request, cert_state)
 
         cert_state.auth_mean = request.selected_challenge
@@ -149,6 +145,6 @@ class Ca(object):
         except KeyError:
             return
         self.app.put_raw_packet(self.cache[Name.to_bytes(name)])
-    
+        
     def go(self):
         self.app.route(self.ca_prefix)(self._on_interest)

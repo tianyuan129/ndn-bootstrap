@@ -119,7 +119,7 @@ class ChallengeResponse(TlvModel):
 
 TLV_ERROR_CODE = 171
 TLV_ERROR_INFO = 173
-class ErrorMessage:
+class ErrorMessage(TlvModel):
     code = UintField(TLV_ERROR_CODE)
     info = BytesField(TLV_ERROR_INFO)
 

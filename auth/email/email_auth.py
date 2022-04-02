@@ -1,12 +1,12 @@
-from distutils import errors
 from typing import Tuple, Dict, Any
 from datetime import datetime
 
 from os import urandom
 from math import floor
 
-from ndn.encoding import Name
+from ndn.encoding import Name, FormalName
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
+from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS
 
 from proto.ndncert_proto import *
 from util.ndncert_crypto import *
@@ -18,16 +18,15 @@ from Cryptodome.Cipher import AES
 from auth.auth import Authenticator
 
 class EmailAuthenticator(Authenticator):
-    def __init__(self, ca_cert_data, keychain, requests_storage: Dict[bytes, Any]):
+    def __init__(self, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
         self.storage = requests_storage
-        self.ca_name = self.ca_cert_data.name[:-5]
+        self.ca_name = self.ca_cert_data.name[:-4]
+        self.config = config
         
     
     def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
-        print(len(request.selected_challenge))
-        print(bytes(request.selected_challenge).decode('utf-8'))
         cert_state.auth_mean = request.selected_challenge
         cert_state.iden_key = request.parameter_key
         cert_state.iden_value = request.parameter_value
@@ -40,10 +39,18 @@ class EmailAuthenticator(Authenticator):
         
         email = bytes(cert_state.iden_value).decode("utf-8")
         secret = "2345"
-        cert_name = parse_certificate(cert_state.csr).name        
-        # print(f'email = {email}')
+        cert_name = parse_certificate(cert_state.csr).name
         
-        SendingEmail(email, secret, Name.to_str(self.ca_name) + '/CA', cert_name)
+        
+        # acceptor fails early
+        if not self.accept(self, cert_state):
+            errs = ErrorMessage()
+            errs.code = ERROR_NAME_NOT_ALLOWED[0]
+            errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
+            return None, errs
+        
+        # print(f'email = {email}')
+        SendingEmail(email, secret, Name.to_str(self.ca_name) + '/CA', Name.to_str(cert_name), 'auth/email/user-auth.conf')
         
         cert_state.auth_key = "code".encode()
         cert_state.auth_value = secret.encode()
@@ -53,10 +60,6 @@ class EmailAuthenticator(Authenticator):
         return response, None
 
     def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
-        
-        print(f'key = {bytes(request.parameter_key).decode("utf-8") }')
-        print(f'value = {bytes(request.parameter_value).decode("utf-8") }')
-        
         if cert_state.auth_key == request.parameter_key:
             if cert_state.auth_value == request.parameter_value:
                 print(f'Success, should issue certificate')
@@ -87,9 +90,42 @@ class EmailAuthenticator(Authenticator):
             errs.code = ERROR_INVALID_PARAMTERS[0]
             errs.info = ERROR_INVALID_PARAMTERS[1].encode()
             return None, errs
-                
+
+    def plain_split(self, identity_value: str) -> FormalName: 
+        index = identity_value.rindex("@")
+        return Name.from_str('/' + str(identity_value[:index]) + '/' + str(identity_value[index + 1:]))
+
+    def accept(self, cert_state: CertState) -> bool:
+        accept_policy = self.config['auth_config']['email']['accept_policy']
+        
+        translator = getattr(self, accept_policy['translator'])
+        translated_name = translator(self, bytes(cert_state.iden_value).decode('utf-8'))
+        
+        lvs = accept_policy['lvs']
+        checker = Checker(compile_lvs(lvs), DEFAULT_USER_FNS)
+        
+        cert_name = parse_certificate(cert_state.csr).name
+        if checker.check(cert_name, translated_name):
+            return True
+        else:
+            identity_fac = 'Identity Factor: ' + bytes(cert_state.iden_key).decode('utf-8')
+            identity_val = ', Identity Value: ' + bytes(cert_state.iden_value).decode('utf-8')
+            
+            fallback_policy = accept_policy['fallback']
+            if not fallback_policy['override']:
+                SendingEmail(fallback_policy['operator_email'], Name.to_str(self.ca_name) + '/CA', 
+                             Name.to_str(cert_name), identity_fac + identity_val, 'auth/operator-email.conf')
+            else:
+                if fallback_policy['override_func'] == 'autofail':
+                    return False
+                else:
+                    #todo: reflect to corresponding fallback policy
+                    pass
+            return False
                 
     # map the inputs to the function blocks
-    actions = {STATUS_BEFORE_CHALLENGE : actions_before_challenge,
-               STATUS_CHALLENGE : actions_continue_challenge
+    actions = {
+        STATUS_BEFORE_CHALLENGE : actions_before_challenge,
+        STATUS_CHALLENGE : actions_continue_challenge
     }
+    
