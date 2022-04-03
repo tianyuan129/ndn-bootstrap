@@ -1,4 +1,5 @@
 from ast import operator
+from curses import flash
 from typing import Tuple, Dict, Any
 from datetime import datetime
 
@@ -97,41 +98,34 @@ class EmailAuthenticator(Authenticator):
         return Name.from_str('/' + str(identity_value[:index]) + '/' + str(identity_value[index + 1:]))
 
     def accept(self, cert_state: CertState) -> bool:
-        accept_policy = self.config['auth_config']['email']['accept_policy']
-        
-        translator = getattr(self, accept_policy['translator'])
-        translated_name = translator(self, bytes(cert_state.iden_value).decode('utf-8'))
-        
-        lvs = accept_policy['lvs']
-        checker = Checker(compile_lvs(lvs), DEFAULT_USER_FNS)
-        
         cert_name = parse_certificate(cert_state.csr).name
+        
+        # semantic check
+        semantic_policy = self.config['auth_config']['email']['semantic_check']
+        translator = getattr(self, semantic_policy['translator'])
+        translated_name = translator(self, bytes(cert_state.iden_value).decode('utf-8'))
+        lvs = semantic_policy['lvs']
+        checker = Checker(compile_lvs(lvs), DEFAULT_USER_FNS)
         if checker.check(cert_name, translated_name):
-            return True
-        else:
-            if accept_policy['full_lvs']:
+            # membership check
+            membership_policy = self.config['auth_config']['email']['membership_check']
+            user_func = getattr(self, membership_policy)
+            if not user_func(self.config, cert_state):
                 return False
-            else:
-                identity_fac = 'Identity Factor: ' + bytes(cert_state.iden_key).decode('utf-8')
-                identity_val = ', Identity Value: ' + bytes(cert_state.iden_value).decode('utf-8')
-                
-                fallback_policy = accept_policy['fallback']
-                if not fallback_policy['override']:
-                    operator_email = fallback_policy['operator_email']
-                    print(f'Sending email to the operator {operator_email}')
-                    SendingEmail(operator_email, Name.to_str(self.ca_name) + '/CA', 
-                                 Name.to_str(cert_name), identity_fac + identity_val, 'auth/operator-email.conf')
-                else:
-                    if fallback_policy['override_func'] == 'autofail':
-                        return False
-                    else:
-                        #todo: reflect to corresponding fallback policy
-                        pass
-            return False
-                
+        else:
+            # cast to corresponding func
+            user_func = getattr(self, semantic_policy['if_lvs_fail']['user_func'])
+            if not user_func(self.config, cert_state):
+                return False
+        
+            # membership check
+            membership_policy = self.config['auth_config']['email']['membership_check']
+            user_func = getattr(self, membership_policy)
+            if not user_func(self.config, cert_state):
+                return False
+    
     # map the inputs to the function blocks
     actions = {
         STATUS_BEFORE_CHALLENGE : actions_before_challenge,
         STATUS_CHALLENGE : actions_continue_challenge
     }
-    
