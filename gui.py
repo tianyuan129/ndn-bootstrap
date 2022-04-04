@@ -63,7 +63,6 @@ def gui_main():
         db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
         db_result = db.get(b'ca_prefix')
         if db_result:
-           print('there is result')
            ca_prefix = db_result.decode()
 
         db_result = db.get(b'approved_requests')
@@ -97,13 +96,13 @@ def gui_main():
         ret = []
         for state in approved_requests.states:
             cert_data = parse_certificate(state.issued_cert)
-            ret.append({'requestID':  base64.b64encode(state.id).decode(),
+            ret.append({'requestId':  base64.b64encode(state.id).decode(),
                         'authMean': bytes(state.auth_mean).decode(),
                         'idenKey': bytes(state.iden_key).decode(),
                         'idenValue': bytes(state.iden_value).decode(),
                         'issuedCertName': Name.to_str(cert_data.name)})
         if len(ret) < 1:
-            ret.append({'requestID': 'N/A',
+            ret.append({'requestId': 'N/A',
                         'authMean': 'N/A',
                         'idenKey': 'N/A',
                         'idenValue': 'N/A',
@@ -125,13 +124,13 @@ def gui_main():
         ret = []
         for state in rejected_requests.states:
             csr_data = parse_certificate(state.csr)
-            ret.append({'requestID': base64.b64encode(state.id).decode(),
+            ret.append({'requestId': base64.b64encode(state.id).decode(),
                         'authMean': bytes(state.auth_mean).decode(),
                         'idenKey': bytes(state.iden_key).decode(),
                         'idenValue': bytes(state.iden_value).decode(),
                         'csrName': Name.to_str(csr_data.name)})
         if len(ret) < 1:
-            ret.append({'requestID': 'N/A',
+            ret.append({'requestId': 'N/A',
                         'authMean': 'N/A',
                         'idenKey': 'N/A',
                         'idenValue': 'N/A',
