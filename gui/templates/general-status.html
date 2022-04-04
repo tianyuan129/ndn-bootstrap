@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>General Status</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <table>
+    <caption>Forwarder General Status</caption>
+    <tr>
+      <th>Item</th>
+      <th>Value</th>
+    </tr>
+    {% for key, value in status.items() %}
+    <tr>
+      <td>{{ key|e }}</td>
+      <td>{{ value|e }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</body>
+</html>

@@ -42,6 +42,11 @@ class Ca(object):
         self.app = app
         #todo: customize the storage type
         self.requests = {}
+        
+        self.approved_requests = IssuedCertStates()
+        self.rejected_requests = RejectedCertStates()
+        self.pending_requests = PendingCertStates()
+        
         self.cache = {}
         self.config = config
         self.ca_prefix = self.config['prefix_config']['prefix_name']
@@ -117,6 +122,9 @@ class Ca(object):
         cert_state.iden_value = request.parameter_value
         
         if response is not None:
+            # success, put into the approved list
+            self.approved_requests.states.append(cert_state)
+            
             plaintext = response.encode()
             message_out, iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), cert_state.iv_counter, 
                                                             bytes(cert_state.id), plaintext)
@@ -128,6 +136,9 @@ class Ca(object):
                 self.cache[Name.to_bytes(issued_name.name)] = cert_state.issued_cert
         else:
             assert err is not None
+            # failed, put into the rejected list
+            self.rejected_requests.states.append(cert_state)
+            
             self.app.put_data(name, content=err.encode(), freshness_period=10000, identity=self.ca_prefix)
 
     def _on_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):

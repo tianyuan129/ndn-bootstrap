@@ -1,0 +1,40 @@
+{% comment %} ret.append({'requestID': bytes(state.id).decode(),
+'authMean': bytes(state.auth_mean).decode(),
+'idenKey': bytes(state.iden_key).decode(),
+'idenValue': bytes(state.iden_value).decode(),
+'csrName': Name.to_str(csr_data.name)}) {% endcomment %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>General Status</title>
+  <link rel="stylesheet" href="../static/css/element-ui.css">
+</head>
+<body>
+  <h2>Rejected Requests</h2>
+  <div id="rejectedrequests">
+    <el-table :data="rejected_requests" border stripe empty-text="no rejected requests available">
+      <el-table-column prop="requestId" label="Request ID" min-width="2"></el-table-column>
+      <el-table-column prop="authMean" label="Authentication Mean" min-width="2"></el-table-column>
+      <el-table-column prop="idenKey" label="Identity Key" min-width="2"></el-table-column>
+      <el-table-column prop="idenValue" label="Identity Value" min-width="2"></el-table-column>
+      <el-table-column prop="csrName" label="Rejected Signing Certificate Request Name" min-width="2"></el-table-column>
+    </el-table>
+  </div>
+</body>
+</html>
+
+<script src="../static/scripts/vue.js"></script>
+<script src="../static/scripts/element-ui.js"></script>
+<script src="../static/scripts/axios.min.js"></script>
+<script>
+  new Vue({
+    el:'#rejected_requests',
+    data(){
+      return{
+        rejected_requests: {{rejected_requests | tojson}}
+      }
+     }
+  })
+</script>

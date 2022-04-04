@@ -1,11 +1,11 @@
 import argparse
-from config import get_yaml
+from util.config import get_yaml
 import logging
 import pkg_resources
 import sys
 from ndn.app import NDNApp
 from ndn.encoding import Name
-from ca import *
+from ca.ca import *
 
 
 def process_cmd_opts():

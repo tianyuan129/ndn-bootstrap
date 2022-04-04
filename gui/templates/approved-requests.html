@@ -1,0 +1,40 @@
+{% comment %} ret.append({'Request ID': bytes(state.id).decode(),
+'Authentication Mean': bytes(state.auth_mean).decode(),
+'Identity Key': bytes(state.iden_key).decode(),
+'Identity Value': bytes(state.iden_value).decode(),
+'Issued Certificate Name': Name.to_str(cert_data.name)}) {% endcomment %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>General Status</title>
+  <link rel="stylesheet" href="../static/css/element-ui.css">
+</head>
+<body>
+  <h2>Approved Requests</h2>
+  <div id="approvedrequests">
+    <el-table :data="approved_requests" border stripe empty-text="no approved requests available">
+      <el-table-column prop="requestId" label="Request ID" min-width="2"></el-table-column>
+      <el-table-column prop="authMean" label="Authentication Mean" min-width="2"></el-table-column>
+      <el-table-column prop="idenKey" label="Identity Key" min-width="2"></el-table-column>
+      <el-table-column prop="idenValue" label="Identity Value" min-width="2"></el-table-column>
+      <el-table-column prop="issuedCertName" label="Issued Certificate Name" min-width="2"></el-table-column>
+    </el-table>
+  </div>
+</body>
+</html>
+
+<script src="../static/scripts/vue.js"></script>
+<script src="../static/scripts/element-ui.js"></script>
+<script src="../static/scripts/axios.min.js"></script>
+<script>
+  new Vue({
+    el:'#approved_requests',
+    data(){
+      return{
+        approved_requests: {{approved_requests | tojson}}
+      }
+     }
+  })
+</script>
