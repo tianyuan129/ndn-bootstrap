@@ -122,6 +122,3 @@ checkpoint
 # Special
 # Requirements should be specified by setup.py
 main.py
-
-pib.db
-/privKeys

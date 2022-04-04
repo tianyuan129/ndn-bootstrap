@@ -109,7 +109,7 @@ class EmailAuthenticator(Authenticator):
         if checker.check(cert_name, translated_name):
             # membership check
             membership_policy = self.config['auth_config']['email']['membership_check']
-            user_func = getattr(self, membership_policy)
+            user_func = getattr(self, membership_policy['user_func'])
             if not user_func(self.config, cert_state):
                 return False
         else:

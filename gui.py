@@ -3,9 +3,9 @@ import time
 import os
 
 from util.config import get_yaml
-
+import plyvel
 import logging
-from ca import Ca
+from ca_storage import *
 from ndn.encoding import Name
 from PIL import Image
 import json
@@ -14,11 +14,17 @@ import socketio
 import aiohttp_jinja2
 import jinja2
 from datetime import datetime
+import base64
 
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate
 
+ca_prefix = 'N/A'
+approved_requests = IssuedCertStates()
+rejected_requests = RejectedCertStates()
+
 def gui_main():
+
     logging.basicConfig(format='[{asctime}]{levelname}:{message}', datefmt='%Y-%m-%d %H:%M:%S',
                         level=logging.DEBUG, style='{')
 
@@ -31,13 +37,11 @@ def gui_main():
     # Create SocketIO async server for controller
     sio = socketio.AsyncServer(async_mode='aiohttp')
     sio.attach(app)
-    
-    ndn_app = NDNApp()
-    ca = Ca(ndn_app, get_yaml(None)).go()
-        # app.run_forever()
-        
-    # controller = CaGui(sio.emit)
-    # controller.system_init()
+
+    db_dir = os.path.expanduser('~/.ndncert-ca-python/')
+    if not os.path.exists(db_dir):
+        os.makedirs(db_dir)
+    db = plyvel.DB(db_dir, create_if_missing=True)
 
     def render_template(template_name, request, **kwargs):
         return aiohttp_jinja2.render_template(template_name, request, context=kwargs)
@@ -59,40 +63,79 @@ def gui_main():
     @routes.get('/system-overview')
     @aiohttp_jinja2.template('system-overview.html')
     async def system_overview(request):
+        global ca_prefix, approved_requests, rejected_requests
+
+        db_result = db.get(b'ca_prefix')
+        if db_result:
+           print('there is result')
+           ca_prefix = db_result.decode()
+
+        db_result = db.get(b'approved_requests')
+        if db_result:
+            approved_requests = IssuedCertStates.parse(db_result)
+
+        db_result = db.get(b'rejected_requests')
+        if db_result:
+            rejected_requests = RejectedCertStates.parse(db_result)
+
         metainfo = []
-        metainfo.append({"information":"System Prefix", "value": ca.ca_prefix})
+        metainfo.append({"information":"System Prefix", "value": ca_prefix})
         # metainfo.append({"information":"System Anchor", "value": controller.system_anchor})
-        metainfo.append({"information": "Approved Certificates", "value": str(len(ca.approved_requests.states))})
-        metainfo.append({"information": "Rejected Certificates", "value": str(len(ca.rejected_requests.states))})
+        metainfo.append({"information": "Approved Certificates", "value": str(len(approved_requests.states))})
+        metainfo.append({"information": "Rejected Certificates", "value": str(len(rejected_requests.states))})
         return {'metainfo': metainfo}
 
     # Approved Certificate Requests List
     @routes.get('/approved-requests')
     @aiohttp_jinja2.template('approved-requests.html')
     async def approved_requests(request):
+        global approved_requests
+
+        db_result = db.get(b'approved_requests')
+        if db_result:
+            approved_requests = IssuedCertStates.parse(db_result)
+
         ret = []
-        for state in ca.approved_requests.states:
+        for state in approved_requests.states:
             cert_data = parse_certificate(state.issued_cert)
-            ret.append({'requestID': bytes(state.id).decode(),
+            ret.append({'requestID':  base64.b64encode(state.id).decode(),
                         'authMean': bytes(state.auth_mean).decode(),
                         'idenKey': bytes(state.iden_key).decode(),
                         'idenValue': bytes(state.iden_value).decode(),
                         'issuedCertName': Name.to_str(cert_data.name)})
-        return {'approved-requests': ret}
+        if len(ret) < 1:
+            ret.append({'requestID': 'N/A',
+                        'authMean': 'N/A',
+                        'idenKey': 'N/A',
+                        'idenValue': 'N/A',
+                        'issuedCertName': 'N/A'})
+        return {'approved_requests': ret}
 
     # Rejected Certificate Requests List
     @routes.get('/rejected-requests')
     @aiohttp_jinja2.template('rejected-requests.html')
     async def rejected_requests(request):
+        global rejected_requests
+
+        db_result = db.get(b'rejected_requests')
+        if db_result:
+            rejected_requests = RejectedCertStates.parse(db_result)
+
         ret = []
-        for state in ca.rejected_requests.states:
+        for state in rejected_requests.states:
             csr_data = parse_certificate(state.csr)
-            ret.append({'requestID': bytes(state.id).decode(),
+            ret.append({'requestID': base64.b64encode(state.id).decode(),
                         'authMean': bytes(state.auth_mean).decode(),
                         'idenKey': bytes(state.iden_key).decode(),
                         'idenValue': bytes(state.iden_value).decode(),
                         'csrName': Name.to_str(csr_data.name)})
-        return {'rejected-requests': ret}
+        if len(ret) < 1:
+            ret.append({'requestID': 'N/A',
+                        'authMean': 'N/A',
+                        'idenKey': 'N/A',
+                        'idenValue': 'N/A',
+                        'csrName': 'N/A'})
+        return {'rejected_requests': ret}
 
     app.add_routes(routes)
     try:
@@ -100,13 +143,6 @@ def gui_main():
     finally:
         # ca.save_db()
         pass
-    try:
-        ca.go()
-        app.run_forever() 
-    except FileNotFoundError:
-        print('Error: could not connect to NFD.')
-    return 0
-
 
 if __name__ == '__main__':
     gui_main()

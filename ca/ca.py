@@ -16,9 +16,11 @@
 # limitations under the License.
 # -----------------------------------------------------------------------------
 from typing import Optional, Dict
+import plyvel
 
 import logging, os, sys
 from os import urandom
+import asyncio
 
 from ndn.app import NDNApp
 from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
@@ -38,8 +40,7 @@ logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     style='{')
 
 class Ca(object):
-    def __init__(self, app: NDNApp, config: Dict):
-        self.app = app
+    def __init__(self, config: Dict):
         #todo: customize the storage type
         self.requests = {}
         
@@ -58,7 +59,56 @@ class Ca(object):
         ca_id = self.keychain.touch_identity(self.ca_prefix)
         ca_cert = ca_id.default_key().default_cert().data
         self.ca_cert_data = parse_certificate(ca_cert)
-        
+        self.db_init()
+
+        self.app = NDNApp(keychain = self.keychain)
+
+    def save_db(self):
+        """
+        Save the state into the database.
+        """
+        logging.debug('Save state to DB')
+        if self.db:
+            wb = self.db.write_batch()
+            wb.put(b'approved_requests', self.IssuedCertStates())
+            wb.put(b'rejected_requests', self.RejectedCertStates())
+            wb.put(b'pending_requests', self.PendingCertStates())
+            wb.write()
+            self.db.close()
+
+    def db_init(self):
+        logging.info("Server starts its initialization")
+        # create or get existing state
+        # Step One: Meta Info
+        # 1. get system prefix from storage (from Level DB)
+        import os
+        self.db_dir = os.path.expanduser('~/.ndncert-ca-python/')
+        if not os.path.exists(self.db_dir):
+            os.makedirs(self.db_dir)
+        self.db = plyvel.DB(self.db_dir, create_if_missing=True)
+        ret = self.db.get(b'ca_prefix')
+        if ret:
+            logging.info(f'Found ca prefix from db: {ret.decode()}')
+            self.ca_prefix = ret.decode()
+        else:
+            self.db.put(b'ca_prefix', self.ca_prefix.encode())
+
+        # Step Two: App Layer Support (from Level DB)
+        ret = self.db.get(b'approved_requests')
+        if ret:
+            logging.info('Found approved_requests from db')
+            self.approved_requests = IssuedCertStates.parse(ret)
+        ret = self.db.get(b'rejected_requests')
+        if ret:
+            logging.info('Found rejected_requests from db')
+            self.rejected_requests = RejectedCertStates.parse(ret)
+        ret = self.db.get(b'pending_requests')
+        if ret:
+            logging.info('Found pending_requests from db')
+            self.pending_requests = PendingCertStates.parse(ret)
+        logging.info("Server finishes the step 2 initialization")
+        self.db.close()
+      
     def on_new_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
         print(f'>> I: {Name.to_str(name)}, {param}')
         request = NewRequest.parse(_app_param)
@@ -73,7 +123,8 @@ class Ca(object):
         response.request_id = urandom(8)
         for auth_method in self.config['auth_config']:
             response.challenges.append(str(auth_method).encode())
-                
+        
+        print(f'{self.ca_prefix}')
         self.app.put_data(name, content=response.encode(), freshness_period=10000, identity=self.ca_prefix)
         
         cert_state = CertState()
@@ -84,9 +135,14 @@ class Ca(object):
         cert_state.csr = request.cert_request
         self.requests[response.request_id] = cert_state
         print(f'Request ID: {response.request_id.hex()}')
+
+        self.pending_requests.states.append(cert_state)
+        self.db = plyvel.DB(self.db_dir)
+        self.db.put(b'pending_requests', self.pending_requests.encode())
+        self.db.close()
         
     def on_challenge_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
-        print(f'>> I: {Name.to_str(name)}, {param}')
+        logging.info(f'>> I: {Name.to_str(name)}, {param}')
         message_in = EncryptedMessage.parse(_app_param)
         request_id = name[-4][-8:]
         
@@ -121,10 +177,7 @@ class Ca(object):
         cert_state.iden_key = request.parameter_key
         cert_state.iden_value = request.parameter_value
         
-        if response is not None:
-            # success, put into the approved list
-            self.approved_requests.states.append(cert_state)
-            
+        if response is not None:            
             plaintext = response.encode()
             message_out, iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), cert_state.iv_counter, 
                                                             bytes(cert_state.id), plaintext)
@@ -134,13 +187,21 @@ class Ca(object):
             if cert_state.issued_cert is not None:
                 issued_name = parse_certificate(cert_state.issued_cert)
                 self.cache[Name.to_bytes(issued_name.name)] = cert_state.issued_cert
-        else:
-            assert err is not None
-            # failed, put into the rejected list
-            self.rejected_requests.states.append(cert_state)
-            
-            self.app.put_data(name, content=err.encode(), freshness_period=10000, identity=self.ca_prefix)
 
+            # success, put into the approved list
+            self.approved_requests.states.append(cert_state)
+            self.db = plyvel.DB(self.db_dir)
+            self.db.put(b'approved_requests', self.approved_requests.encode())
+            self.db.close()
+        else:
+            assert err is not None          
+            self.app.put_data(name, content=err.encode(), freshness_period=10000, identity=self.ca_prefix)
+            # rejected, put into the rejected list
+            self.rejected_requests.states.append(cert_state)
+            self.db = plyvel.DB(self.db_dir)
+            self.db.put(b'rejected_requests', self.rejected_requests.encode())
+            self.db.close()
+        
     def _on_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
         # dispatch to corresponding handlers
         if Name.is_prefix(self.ca_prefix + '/CA/NEW', name):
@@ -159,3 +220,4 @@ class Ca(object):
         
     def go(self):
         self.app.route(self.ca_prefix)(self._on_interest)
+        self.app.run_forever()

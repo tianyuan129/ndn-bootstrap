@@ -80,10 +80,8 @@ def main() -> int:
     print(config)
     config_logging(config['logging_config'])
 
-    app = NDNApp()
     try:
-        Ca(app, config).go()
-        app.run_forever()
+        Ca(config).go()
     except FileNotFoundError:
         print('Error: could not connect to NFD.')
     return 0
