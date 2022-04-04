@@ -38,11 +38,6 @@ def gui_main():
     sio = socketio.AsyncServer(async_mode='aiohttp')
     sio.attach(app)
 
-    db_dir = os.path.expanduser('~/.ndncert-ca-python/')
-    if not os.path.exists(db_dir):
-        os.makedirs(db_dir)
-    db = plyvel.DB(db_dir, create_if_missing=True)
-
     def render_template(template_name, request, **kwargs):
         return aiohttp_jinja2.render_template(template_name, request, context=kwargs)
 
@@ -65,6 +60,7 @@ def gui_main():
     async def system_overview(request):
         global ca_prefix, approved_requests, rejected_requests
 
+        db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
         db_result = db.get(b'ca_prefix')
         if db_result:
            print('there is result')
@@ -77,6 +73,7 @@ def gui_main():
         db_result = db.get(b'rejected_requests')
         if db_result:
             rejected_requests = RejectedCertStates.parse(db_result)
+        db.close()
 
         metainfo = []
         metainfo.append({"information":"System Prefix", "value": ca_prefix})
@@ -91,7 +88,9 @@ def gui_main():
     async def approved_requests(request):
         global approved_requests
 
+        db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
         db_result = db.get(b'approved_requests')
+        db.close()
         if db_result:
             approved_requests = IssuedCertStates.parse(db_result)
 
@@ -117,7 +116,9 @@ def gui_main():
     async def rejected_requests(request):
         global rejected_requests
 
+        db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
         db_result = db.get(b'rejected_requests')
+        db.close()
         if db_result:
             rejected_requests = RejectedCertStates.parse(db_result)
 
