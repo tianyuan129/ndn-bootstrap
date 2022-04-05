@@ -14,6 +14,11 @@
       <el-table-column prop="idenKey" label="Identity Key" min-width="2"></el-table-column>
       <el-table-column prop="idenValue" label="Identity Value" min-width="2"></el-table-column>
       <el-table-column prop="csrName" label="Rejected Certificate Signing Request Name" min-width="2"></el-table-column>
+      <el-table-column label="Operation" min-width="1">
+        <template slot-scope="scope">
+        <el-button @click="deleteRow(scope.$index)" type="danger" size="small">remove</el-button>
+        </template>
+      </el-table-column>
     </el-table>
   </div>
 </body>
@@ -29,6 +34,28 @@
       return{
         rejected_requests: {{rejected_requests | tojson}}
       }
+     },
+     methods:{
+        deleteRow(index){
+          let vm = this;
+          console.log(this.rejected_requests[index]);
+          axios.post('/approve/rejected-requests',{requestId: this.rejected_requests[index].requestId},{
+                        headers: {'Content-Type': 'application/json'}
+                        }).then(response=>{
+                          if (response.data.st_code === 200){
+                            this.$notify.success({
+                                title: 'SUCCESS',
+                                message: 'Manual approval succeeded'
+                                });
+                                vm.rejected_requests.splice(index, 1)
+                          }else{
+                            this.$notify.error({
+                                  title: 'ERROR',
+                                  message: 'Manual approval failed',
+                               });
+                          }
+
+                        });
+        }
      }
   })
-</script>

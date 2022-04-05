@@ -13,7 +13,7 @@ from aiohttp import web
 import socketio
 import aiohttp_jinja2
 import jinja2
-from datetime import datetime
+from datetime import datetime, timedelta
 import base64
 
 from ndn.app import NDNApp
@@ -22,6 +22,7 @@ from ndn.app_support.security_v2 import parse_certificate
 ca_prefix = 'N/A'
 approved_requests = IssuedCertStates()
 rejected_requests = RejectedCertStates()
+manual_approved = ManualApprovalList()
 
 def gui_main():
 
@@ -136,6 +137,41 @@ def gui_main():
                         'idenValue': 'N/A',
                         'csrName': 'N/A'})
         return {'rejected_requests': ret}
+
+    @routes.post('/approve/rejected-requests')
+    async def approve_rejected(request):
+        global rejected_requests, manual_approved
+        data = await request.json()
+        
+        # no need to get, gui is the only writer
+        # todo: clean up the list based on ttl
+        
+        request_to_approve = base64.b64decode(data['requestId'])
+        # get the rejected list
+        db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
+        db_result = db.get(b'rejected_requests')
+        # db.close()
+        if db_result:
+            rejected_requests = RejectedCertStates.parse(db_result)
+            
+        cert_state = CertState()
+        for rejected in rejected_requests.states:
+            if rejected.id == request_to_approve:
+                cert_state = rejected
+                # append the manual approval list
+                approval = ManualApproval()
+                approval.state = rejected
+                # approval.expires =
+                start_time = datetime.utcnow()
+                end_time = start_time + timedelta(minutes=5)
+                approval.expires = int(end_time.timestamp())
+                manual_approved.approvals.append(approval)
+                
+                # write back to db
+                db.put(b'manual_approved', manual_approved.encode())
+        
+        db.close()
+        return web.json_response({"st_code": 200})
 
     app.add_routes(routes)
     try:

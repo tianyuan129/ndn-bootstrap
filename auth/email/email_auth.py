@@ -4,7 +4,9 @@ from typing import Tuple, Dict, Any
 from datetime import datetime
 
 from os import urandom
+import os
 from math import floor
+import plyvel
 
 from ndn.encoding import Name, FormalName
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
@@ -26,6 +28,8 @@ class EmailAuthenticator(Authenticator):
         self.storage = requests_storage
         self.ca_name = self.ca_cert_data.name[:-4]
         self.config = config
+        self.db_dir = os.path.expanduser('~/.ndncert-ca-python/')
+        Authenticator.__init__(self, self.config, 'email')
         
     
     def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
@@ -45,7 +49,7 @@ class EmailAuthenticator(Authenticator):
         
         
         # acceptor fails early
-        if not self.accept(self, cert_state):
+        if not self.accept(self, self, cert_state):
             errs = ErrorMessage()
             errs.code = ERROR_NAME_NOT_ALLOWED[0]
             errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
@@ -96,33 +100,6 @@ class EmailAuthenticator(Authenticator):
     def plain_split(self, identity_value: str) -> FormalName: 
         index = identity_value.rindex("@")
         return Name.from_str('/' + str(identity_value[:index]) + '/' + str(identity_value[index + 1:]))
-
-    def accept(self, cert_state: CertState) -> bool:
-        cert_name = parse_certificate(cert_state.csr).name
-        
-        # semantic check
-        semantic_policy = self.config['auth_config']['email']['semantic_check']
-        translator = getattr(self, semantic_policy['translator'])
-        translated_name = translator(self, bytes(cert_state.iden_value).decode('utf-8'))
-        lvs = semantic_policy['lvs']
-        checker = Checker(compile_lvs(lvs), DEFAULT_USER_FNS)
-        if checker.check(cert_name, translated_name):
-            # membership check
-            membership_policy = self.config['auth_config']['email']['membership_check']
-            user_func = getattr(self, membership_policy['user_func'])
-            if not user_func(self.config, cert_state):
-                return False
-        else:
-            # cast to corresponding func
-            user_func = getattr(self, semantic_policy['if_lvs_fail']['user_func'])
-            if not user_func(self.config, cert_state):
-                return False
-        
-            # membership check
-            membership_policy = self.config['auth_config']['email']['membership_check']
-            user_func = getattr(self, membership_policy)
-            if not user_func(self.config, cert_state):
-                return False
     
     # map the inputs to the function blocks
     actions = {
