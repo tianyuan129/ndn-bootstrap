@@ -24,6 +24,9 @@ approved_requests = IssuedCertStates()
 rejected_requests = RejectedCertStates()
 manual_approved = ManualApprovalList()
 
+rejected_bindings = IdentityBindingList()
+approved_bindings = IdentityBindingList()
+
 def gui_main():
 
     logging.basicConfig(format='[{asctime}]{levelname}:{message}', datefmt='%Y-%m-%d %H:%M:%S',
@@ -102,12 +105,6 @@ def gui_main():
                         'idenKey': bytes(state.iden_key).decode(),
                         'idenValue': bytes(state.iden_value).decode(),
                         'issuedCertName': Name.to_str(cert_data.name)})
-        if len(ret) < 1:
-            ret.append({'requestId': 'N/A',
-                        'authMean': 'N/A',
-                        'idenKey': 'N/A',
-                        'idenValue': 'N/A',
-                        'issuedCertName': 'N/A'})
         return {'approved_requests': ret}
 
     # Rejected Certificate Requests List
@@ -130,46 +127,104 @@ def gui_main():
                         'idenKey': bytes(state.iden_key).decode(),
                         'idenValue': bytes(state.iden_value).decode(),
                         'csrName': Name.to_str(csr_data.name)})
-        if len(ret) < 1:
-            ret.append({'requestId': 'N/A',
-                        'authMean': 'N/A',
-                        'idenKey': 'N/A',
-                        'idenValue': 'N/A',
-                        'csrName': 'N/A'})
         return {'rejected_requests': ret}
 
-    @routes.post('/approve/rejected-requests')
+    # Rejected Identity Binding List
+    @routes.get('/rejected-bindings')
+    @aiohttp_jinja2.template('rejected-bindings.html')
+    async def rejected_requests(request):
+        global rejected_bindings
+
+        db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
+        db_result = db.get(b'rejected_bindings')
+        db.close()
+        if db_result:
+            rejected_bindings = IdentityBindingList.parse(db_result)
+
+        ret = []
+        for binding in rejected_bindings.bindings:
+            date_time = datetime.fromtimestamp(binding.timestamp)
+            ret.append({'bindingId': str(binding.id),
+                        'authMean': bytes(binding.auth_mean).decode(),
+                        'idenKey': bytes(binding.iden_key).decode(),
+                        'idenValue': bytes(binding.iden_value).decode(),
+                        'name': Name.to_str(binding.name),
+                        'effTimestamp': date_time.strftime("%Y/%m/%d, %H:%M:%S")})
+        print(ret)
+        return {'rejected_bindings': ret}
+
+    # Approved Identity Binding List
+    @routes.get('/approved-bindings')
+    @aiohttp_jinja2.template('approved-bindings.html')
+    async def rejected_requests(request):
+        global approved_bindings
+
+        db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
+        db_result = db.get(b'approved_bindings')
+        db.close()
+        if db_result:
+            approved_bindings = IdentityBindingList.parse(db_result)
+
+        # clean up all expired bindings
+        approved_bindings.bindings = [binding for binding in approved_bindings.bindings
+                                      if binding.timestamp and 
+                                         binding.timestamp > int(datetime.utcnow().timestamp())]
+        print(len(approved_bindings.bindings))
+
+        ret = []
+        for binding in approved_bindings.bindings:
+            date_time = datetime.fromtimestamp(binding.timestamp)
+            ret.append({'bindingId': str(binding.id),
+                        'authMean': bytes(binding.auth_mean).decode(),
+                        'idenKey': bytes(binding.iden_key).decode(),
+                        'idenValue': bytes(binding.iden_value).decode(),
+                        'name': Name.to_str(binding.name),
+                        'expiresAt': date_time.strftime("%Y/%m/%d, %H:%M:%S")})
+        return {'approved_bindings': ret}
+
+    @routes.post('/approve/rejected-bindings')
     async def approve_rejected(request):
-        global rejected_requests, manual_approved
+        global rejected_bindings, approved_bindings
         data = await request.json()
         
-        # no need to get, gui is the only writer
-        # todo: clean up the list based on ttl
-        
-        request_to_approve = base64.b64decode(data['requestId'])
         # get the rejected list
         db = plyvel.DB(os.path.expanduser('~/.ndncert-ca-python/'))
-        db_result = db.get(b'rejected_requests')
+        db_result = db.get(b'rejected_bindings')
+        user_approved = IdentityBinding()
         # db.close()
         if db_result:
-            rejected_requests = RejectedCertStates.parse(db_result)
+            rejected_bindings = IdentityBindingList.parse(db_result)
+            for binding in rejected_bindings.bindings:
+                if binding.id == int(data['bindingId']):
+                    user_approved = binding
             
-        cert_state = CertState()
-        for rejected in rejected_requests.states:
-            if rejected.id == request_to_approve:
-                cert_state = rejected
-                # append the manual approval list
-                approval = ManualApproval()
-                approval.state = rejected
-                # approval.expires =
-                start_time = datetime.utcnow()
-                end_time = start_time + timedelta(minutes=5)
-                approval.expires = int(end_time.timestamp())
-                manual_approved.approvals.append(approval)
-                
-                # write back to db
-                db.put(b'manual_approved', manual_approved.encode())
+            rejected_bindings.bindings = [binding for bindings in rejected_bindings.bindings
+                                           if binding.id != int(data['bindingId'])]
+            db.put(b'rejected_bindings', rejected_bindings.encode())
+
+        # if found one
+        if user_approved.timestamp is not None:
+            start_time = datetime.utcnow()
+            end_time = start_time + timedelta(hours=1)
+            user_approved.timestamp = int(end_time.timestamp())
+
+        # write to approved list
+        db_result = db.get(b'approved_bindings')
+        approved_bindings = IdentityBindingList()
+        not_found = True
+        if db_result:
+            approved_bindings = IdentityBindingList.parse(db_result)            
+            for approved in approved_bindings.bindings:
+                if user_approved.auth_mean == apr.auth_mean or \
+                   user_approved.iden_key == rejected.iden_key or \
+                   user_approved.iden_value == rejected.iden_value or \
+                   user_approved.name == rejected.name:
+                   not_found = False
         
+        if not_found:
+            approved_bindings.bindings.append(user_approved)
+        print(len(approved_bindings.bindings))
+        db.put(b'approved_bindings', approved_bindings.encode())
         db.close()
         return web.json_response({"st_code": 200})
 

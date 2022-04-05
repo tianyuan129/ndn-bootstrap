@@ -6,14 +6,15 @@
   <link rel="stylesheet" href="../static/css/element-ui.css">
 </head>
 <body>
-  <h2>Rejected Requests</h2>
-  <div id="rejected_requests">
-    <el-table :data="rejected_requests" border stripe empty-text="no rejected requests available">
-      <el-table-column prop="requestId" label="Request ID" min-width="1"></el-table-column>
+  <h2>Approved Identity Bindings</h2>
+  <div id="approved_bindings">
+    <el-table :data="approved_bindings" border stripe empty-text="no approved identity bindings available">
+      <el-table-column prop="bindingId" label="Binding ID" min-width="1"></el-table-column>
       <el-table-column prop="authMean" label="Authentication Mean" min-width="2"></el-table-column>
-      <el-table-column prop="idenKey" label="Identity Key" min-width="2"></el-table-column> 
+      <el-table-column prop="idenKey" label="Identity Key" min-width="2"></el-table-column>
       <el-table-column prop="idenValue" label="Identity Value" min-width="2"></el-table-column>
-      <el-table-column prop="csrName" label="Rejected Certificate Signing Request Name" min-width="3"></el-table-column>
+      <el-table-column prop="name" label="Name" min-width="2"></el-table-column>
+      <el-table-column prop="expiresAt" label="Expires At (UTC)" min-width="2"></el-table-column>
     </el-table>
   </div>
 </body>
@@ -24,10 +25,10 @@
 <script src="../static/scripts/axios.min.js"></script>
 <script>
   new Vue({
-    el:'#rejected_requests',
+    el:'#approved_bindings',
     data(){
       return{
-        rejected_requests: {{rejected_requests | tojson}}
+        approved_bindings: {{approved_bindings | tojson}}
       }
      }
   })

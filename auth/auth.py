@@ -10,6 +10,8 @@ from ndn.encoding import Name, FormalName
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS
 
+from datetime import datetime
+
 class Authenticator(object):
     def __init__(self, config: Dict, auth_mean: str):
         self.config = config
@@ -47,23 +49,26 @@ class Authenticator(object):
     def accept_from_approval_list(target_auth, cert_state: CertState) -> bool:
         cert_name = parse_certificate(cert_state.csr).name
         identity_name = cert_name[:-4]
-        
-        # check for manual approval list
+
+        # clean up all expired bindings
         db = plyvel.DB(target_auth.db_dir)
-        db_result = db.get(b'manual_approved')
-        db.close()
+        db_result = db.get(b'approved_bindings')
         if db_result:
-            manual_approved = ManualApprovalList.parse(db_result)
-            for approval in manual_approved.approvals:
+            approved_bindings = IdentityBindingList.parse(db_result)
+            approved_bindings.bindings = [binding for binding in approved_bindings.bindings
+                                            if binding.timestamp and
+                                               binding.timestamp > int(datetime.utcnow().timestamp())]
+            db.put(b'approved_bindings', approved_bindings.encode())                       
+        db.close()
+
+        if db_result:
+            for binding in approved_bindings.bindings:
                 # the following must excat match
-                # auth mean, iden_key, iden_value, identity name
-                
-                approved_csr_name = parse_certificate(cert_state.csr).name
-                approved_identity_name = approved_csr_name[:-4]
-                if approval.state.auth_mean == cert_state.auth_mean and \
-                   approval.state.iden_key == cert_state.iden_key and \
-                   approval.state.iden_value == cert_state.iden_value and \
-                   approved_identity_name == identity_name:
+                # auth mean, iden_key, iden_value, name
+                if binding.auth_mean == cert_state.auth_mean and \
+                   binding.iden_key == cert_state.iden_key and \
+                   binding.iden_value == cert_state.iden_value and \
+                   binding.name == identity_name:
                     return True
         return False
 
@@ -80,14 +85,14 @@ class Authenticator(object):
             return True
         else:
             # cast to corresponding func
-            user_func = getattr(target_auth, semantic_policy[self.auth_mean]['user_func'])
-            return user_func(target_auth.config, cert_state)
+            user_func = getattr(target_auth, semantic_policy['if_lvs_fail']['user_func'])
+            return user_func(target_auth, cert_state)
 
     def accept_from_membership(self, target_auth, cert_state: CertState) -> bool:
         # membership check
         membership_policy = self.config['auth_config'][self.auth_mean]['membership_check']
         user_func = getattr(target_auth, membership_policy['user_func'])
-        return user_func(target_auth.config, cert_state)
+        return user_func(target_auth, cert_state)
 
     def accept(self, target_auth, cert_state: CertState) -> bool:
         # check for manual approval list

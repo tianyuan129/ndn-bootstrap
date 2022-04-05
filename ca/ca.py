@@ -21,11 +21,13 @@ import plyvel
 import logging, os, sys
 from os import urandom
 import asyncio
+from datetime import datetime
 
 from ndn.app import NDNApp
 from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
 from ndn.app_support.security_v2 import parse_certificate
 from ndn.security import KeychainSqlite3, TpmFile
+from ndn.utils import gen_nonce
 
 from proto.ndncert_proto import *
 from util.ndncert_crypto import *
@@ -47,7 +49,8 @@ class Ca(object):
         self.approved_requests = IssuedCertStates()
         self.rejected_requests = RejectedCertStates()
         self.pending_requests = PendingCertStates()
-        
+        self.rejected_bindings = IdentityBindingList()
+
         self.cache = {}
         self.config = config
         self.ca_prefix = self.config['prefix_config']['prefix_name']
@@ -63,18 +66,19 @@ class Ca(object):
 
         self.app = NDNApp(keychain = self.keychain)
 
-    def save_db(self):
-        """
-        Save the state into the database.
-        """
-        logging.debug('Save state to DB')
-        if self.db:
-            wb = self.db.write_batch()
-            wb.put(b'approved_requests', self.IssuedCertStates())
-            wb.put(b'rejected_requests', self.RejectedCertStates())
-            wb.put(b'pending_requests', self.PendingCertStates())
-            wb.write()
-            self.db.close()
+    # def save_db(self):
+    #     """
+    #     Save the state into the database.
+    #     """
+    #     logging.debug('Save state to DB')
+    #     if self.db:
+    #         wb = self.db.write_batch()
+    #         wb.put(b'approved_requests', self.approved_requests.encode())
+    #         wb.put(b'rejected_requests', self.rejected_requests.encode())
+    #         wb.put(b'pending_requests', self.pending_requests.encode())
+    #         wb.put(b'rejected_bindings', self.rejected_bindings.encode())
+    #         wb.write()
+    #         self.db.close()
 
     def db_init(self):
         logging.info("Server starts its initialization")
@@ -106,9 +110,14 @@ class Ca(object):
         if ret:
             logging.info('Found pending_requests from db')
             self.pending_requests = PendingCertStates.parse(ret)
+      
+        ret = self.db.get(b'rejected_bindings')
+        if ret:
+            logging.info('Found rejected_bindings from db')
+            self.rejected_bindings = IdentityBindingList.parse(ret)
         logging.info("Server finishes the step 2 initialization")
         self.db.close()
-      
+
     def on_new_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
         print(f'>> I: {Name.to_str(name)}, {param}')
         request = NewRequest.parse(_app_param)
@@ -200,6 +209,34 @@ class Ca(object):
             self.rejected_requests.states.append(cert_state)
             self.db = plyvel.DB(self.db_dir)
             self.db.put(b'rejected_requests', self.rejected_requests.encode())
+
+            # collect the identity binding
+            csr_name = parse_certificate(cert_state.csr).name
+            identity_name = csr_name[:-4]
+
+            binding = IdentityBinding()
+            binding.id = gen_nonce()
+            binding.auth_mean = cert_state.auth_mean
+            binding.iden_key = cert_state.iden_key
+            binding.iden_value= cert_state.iden_value
+            binding.name = identity_name
+            binding.timestamp = int(datetime.utcnow().timestamp())
+
+            db_result = self.db.get(b'rejected_bindings')
+            if db_result:
+               self.rejected_bindings = IdentityBindingList.parse(db_result)
+
+            not_found = True
+            for rejected in self.rejected_bindings.bindings:
+                if binding.auth_mean == rejected.auth_mean and \
+                   binding.iden_key == rejected.iden_key and \
+                   binding.iden_value == rejected.iden_value and \
+                   binding.name == rejected.name:
+                    not_found = False
+            if not_found:
+                self.rejected_bindings.bindings.append(binding)
+                print('appeneded')
+            self.db.put(b'rejected_bindings', self.rejected_bindings.encode())
             self.db.close()
         
     def _on_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):

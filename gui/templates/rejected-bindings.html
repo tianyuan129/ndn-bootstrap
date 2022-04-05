@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>General Status</title>
+  <link rel="stylesheet" href="../static/css/element-ui.css">
+</head>
+<body>
+  <h2>Rejected Identity Bindings</h2>
+  <div id="rejected_bindings">
+    <el-table :data="rejected_bindings" border stripe empty-text="no rejected bindings available">
+      <el-table-column prop="bindingId" label="Binding ID" min-width="1"></el-table-column>
+      <el-table-column prop="authMean" label="Authentication Mean" min-width="1"></el-table-column>
+      <el-table-column prop="idenKey" label="Identity Key" min-width="2"></el-table-column>
+      <el-table-column prop="idenValue" label="Identity Value" min-width="2"></el-table-column>
+      <el-table-column prop="name" label="Name" min-width="2"></el-table-column>
+      <el-table-column prop="effTimestamp" label="Effective Timestamp (UTC)" min-width="2"></el-table-column>
+      <el-table-column label="Operation" min-width="1">
+        <template slot-scope="scope">
+            <el-button @click="deleteRow(scope.$index)" type="success" size="large">Approve (1 hour)</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+  </div>
+</body>
+</html>
+
+<script src="../static/scripts/vue.js"></script>
+<script src="../static/scripts/element-ui.js"></script>
+<script src="../static/scripts/axios.min.js"></script>
+<script>
+  new Vue({
+    el:'#rejected_bindings',
+    data(){
+      return{
+        rejected_bindings:{{rejected_bindings | tojson}},
+      }
+     },
+     methods:{
+        deleteRow(index){
+          let vm = this;
+          console.log(this.rejected_bindings[index]);
+          axios.post('/approve/rejected-bindings',{bindingId:this.rejected_bindings[index].bindingId},{
+                        headers: {'Content-Type': 'application/json'}
+                        }).then(response=>{
+                          if (response.data.st_code === 200){
+                            this.$notify.success({
+                                title: 'SUCCESS',
+                                message: 'Binding Approval Succeeded'
+                                });
+                                vm.rejected_bindings.splice(index,1)
+                          }else{
+                            this.$notify.error({
+                                  title: 'ERROR',
+                                  message: 'Binding Approval Failure',
+                               });
+                          }
+                        });
+        }
+     }
+  })
+</script>

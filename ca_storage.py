@@ -20,6 +20,16 @@ class CertState(TlvModel):
     
     issued_cert = BytesField(11)
 
+class IdentityBinding(TlvModel):
+    id = UintField(9)
+    auth_mean = BytesField(6)
+    iden_key = BytesField(7)
+    iden_value = BytesField(8)
+    name = NameField()
+    timestamp = UintField(9)
+
+class IdentityBindingList(TlvModel):
+    bindings = RepeatedField(ModelField(1, IdentityBinding))
 
 class IssuedCertStates(TlvModel):
     states = RepeatedField(ModelField(1, CertState))
