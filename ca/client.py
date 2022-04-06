@@ -28,7 +28,7 @@ class Client(object):
     
     async def _process_challenge_response(self, ca_prefix: FormalName, request_id: bytes,
                                           ecdh: ECDH, iv_counter: bytes, signer,
-                                          message_in: EncryptedMessage, verifier: Verifier):
+                                          message_in: EncryptedMessage, verifier: Verifier) -> Tuple[FormalName, FormalName]:
         aes_key = ecdh.derived_key
         plaintext = get_encrypted_message(bytes(aes_key), request_id, message_in)
         challenge_response = ChallengeResponse.parse(plaintext)
@@ -49,16 +49,15 @@ class Client(object):
                 interest_name, app_param = message_out.encode(), must_be_fresh=True, 
                 can_be_prefix=False, lifetime=6000, signer=signer)
 
-            await self._process_challenge_response(ca_prefix, request_id, 
-                                                   ecdh, iv_counter, signer, 
-                                                   EncryptedMessage.parse(content), verifier)
+            return await self._process_challenge_response(ca_prefix, request_id, 
+                                                          ecdh, iv_counter, signer, 
+                                                          EncryptedMessage.parse(content), verifier)
             
         if challenge_response.status == STATUS_PENDING:
-            self.forwarding_hint = challenge_response.forwarding_hint
-            self.issued_cert_name = challenge_response.issued_cert_name
+            return challenge_response.issued_cert_name, challenge_response.forwarding_hint
         
 
-    async def cert_signing(self, ca_prefix: FormalName, csr: bytes, signer, selector: Selector, verifier: Verifier):
+    async def request_signing(self, ca_prefix: FormalName, csr: bytes, signer, selector: Selector, verifier: Verifier) -> Tuple[FormalName, FormalName]:
         # NEW
         new_request = NewRequest()
         ecdh = ECDH()
@@ -66,7 +65,6 @@ class Client(object):
         new_request.cert_request = csr
         
         interest_name = ca_prefix + Name.from_str('/CA/NEW')
-        print(f'{Name.to_str(interest_name)}')
         data_name, meta_info, content = await self.app.express_interest(
             interest_name, app_param = new_request.encode(), must_be_fresh=True, 
             can_be_prefix=False, lifetime=6000, signer=signer)
@@ -98,18 +96,15 @@ class Client(object):
 
         # express the interest
         interest_name = ca_prefix + Name.from_str('/CA/CHALLENGE')
-        interest_name = interest_name + [Component.from_bytes(request_id)]
-        
-        print(f'Request ID: {request_id.hex()}')
-        
+        interest_name = interest_name + [Component.from_bytes(request_id)] 
         
         data_name, meta_info, content = await self.app.express_interest(
             interest_name, app_param = message_out.encode(), must_be_fresh=True, 
             can_be_prefix=False, lifetime=6000, signer=signer)
 
-        await self._process_challenge_response(ca_prefix, request_id, 
-                                               ecdh, iv_counter, signer, 
-                                               EncryptedMessage.parse(content), verifier)
+        return await self._process_challenge_response(ca_prefix, request_id, 
+                                                      ecdh, iv_counter, signer, 
+                                                      EncryptedMessage.parse(content), verifier)
         
     
             

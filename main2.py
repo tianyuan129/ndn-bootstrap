@@ -25,8 +25,6 @@ async def email_verifier(challenge_status: bytes, param_key: bytes, param_value:
 async def main() -> int:
 
     client = Client(app, None, None)
-    
-    
     with TemporaryDirectory() as tmpdirname:
         pib_file = os.path.join(tmpdirname, 'pib.db')
         tpm_dir = os.path.join(tmpdirname, 'privKeys')
@@ -43,9 +41,9 @@ async def main() -> int:
         
         if ty_signer is None:
             print(f'signer is none')
-        csr_name, csr = sign_req(ty_key_name, ty_cert_data.content, ty_signer)
-        print(f'{Name.to_str(csr_name)}')
-        await client.cert_signing(Name.from_str('/ndn'), bytes(csr), ty_signer, select_first, email_verifier)
+        _, csr = sign_req(ty_key_name, ty_cert_data.content, ty_signer)
+        issued_cert_name, hint = await client.request_signing(Name.from_str('/ndn'), bytes(csr), ty_signer, select_first, email_verifier)
+        print(f'{Name.to_str(issued_cert_name)}, {Name.to_str(hint)}')
 
     return 0
 
