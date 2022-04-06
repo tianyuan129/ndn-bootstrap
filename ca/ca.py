@@ -1,3 +1,4 @@
+from re import X
 from typing import Optional, Dict
 import plyvel
 
@@ -116,8 +117,7 @@ class Ca(object):
         for auth_method in self.config['auth_config']:
             if str(auth_method) != 'operator_email':
                 response.challenges.append(str(auth_method).encode())
-        
-        print(f'{self.ca_prefix}')
+
         self.app.put_data(name, content=response.encode(), freshness_period=10000, identity=self.ca_prefix)
         
         cert_state = CertState()
@@ -137,9 +137,8 @@ class Ca(object):
     def on_challenge_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
         logging.info(f'>> I: {Name.to_str(name)}, {param}')
         message_in = EncryptedMessage.parse(_app_param)
-        
-        # request_id = name[-4][-8:]
-        request_id = name[-2][-8:]
+        request_id = name[len(Name.from_str(self.ca_prefix)) + 2][-8:]
+
         try:
             self.requests[request_id]
         except KeyError:
