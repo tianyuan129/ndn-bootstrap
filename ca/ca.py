@@ -1,20 +1,3 @@
-# -----------------------------------------------------------------------------
-# Copyright (C) 2019-2020 The python-ndn authors
-#
-# This file is part of python-ndn.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# -----------------------------------------------------------------------------
 from typing import Optional, Dict
 import plyvel
 
@@ -24,7 +7,7 @@ import asyncio
 from datetime import datetime
 
 from ndn.app import NDNApp
-from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
+from ndn.encoding import Name, Component, InterestParam, BinaryStr, FormalName
 from ndn.app_support.security_v2 import parse_certificate
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.utils import gen_nonce
@@ -131,7 +114,8 @@ class Ca(object):
         response.salt = urandom(32)
         response.request_id = urandom(8)
         for auth_method in self.config['auth_config']:
-            response.challenges.append(str(auth_method).encode())
+            if str(auth_method) != 'operator_email':
+                response.challenges.append(str(auth_method).encode())
         
         print(f'{self.ca_prefix}')
         self.app.put_data(name, content=response.encode(), freshness_period=10000, identity=self.ca_prefix)
@@ -153,18 +137,25 @@ class Ca(object):
     def on_challenge_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
         logging.info(f'>> I: {Name.to_str(name)}, {param}')
         message_in = EncryptedMessage.parse(_app_param)
-        request_id = name[-4][-8:]
         
+        # request_id = name[-4][-8:]
+        request_id = name[-2][-8:]
         try:
             self.requests[request_id]
         except KeyError:
-            print(f'Not CertState for Request ID: {response.request_id.hex()}')
+            print(f'Not CertState for Request ID: {request_id.hex()}')
             return
         cert_state = self.requests[request_id]
         
         payload = get_encrypted_message(bytes(cert_state.aes_key), bytes(cert_state.id), message_in)
         request = ChallengeRequest.parse(payload)
-        challenge_type = bytes(request.selected_challenge).decode('utf-8')
+        
+        challenge_type = ''
+        if cert_state.auth_mean:
+            challenge_type = bytes(cert_state.auth_mean).decode()
+        else:
+            challenge_type = bytes(request.selected_challenge).decode('utf-8')
+            cert_state.auth_mean = challenge_type.encode()
         
         # if challenge not available
         if not challenge_type in self.config['auth_config']:

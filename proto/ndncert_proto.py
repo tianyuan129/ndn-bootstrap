@@ -116,6 +116,8 @@ class ChallengeResponse(TlvModel):
     # parameters = RepeatedField(Parameter)
     issued_cert_name = BytesField(TLV_ISSUED_CERT_NAME_TYPE)
     forwarding_hint = BytesField(TypeNumber.FORWARDING_HINT)
+    parameter_key = BytesField(TLV_PARAMETER_KEY_TYPE)
+    parameter_value = BytesField(TLV_PARAMETER_VALUE_TYPE)
 
 TLV_ERROR_CODE = 171
 TLV_ERROR_INFO = 173
