@@ -1,29 +1,17 @@
-from email import message
-from typing import Optional, Dict, Callable, Any, Coroutine, List
-from os import urandom
+from typing import Callable, Tuple, List
 
 from ndn.app import NDNApp, InterestNack, InterestTimeout, InterestCanceled, ValidationFailure
-from ndn.encoding import Name, Component, InterestParam, BinaryStr, FormalName
-from ndn.app_support.security_v2 import parse_certificate, CertificateV2Value
-from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS, LvsModel
-from ndn.utils import gen_nonce
+from ndn.encoding import Name, Component, FormalName
 
 from proto.ndncert_proto import *
 from util.ndncert_crypto import *
-
-from auth import *
-
-from ca_storage import *
 
 Selector = Callable[[List[bytes]], Tuple[bytes, bytes, bytes]]
 
 Verifier = Callable[[bytes, bytes, bytes], Tuple[bytes, bytes]]
 
 class Client(object):
-    def __init__(self, app: NDNApp, trust_anchor: CertificateV2Value, trust_schema: LvsModel):
-        #todo: customize the storage type
-        self.trust_anchor = trust_anchor
-        self.trust_schema = trust_schema
+    def __init__(self, app: NDNApp):
         self.app = app
     
     async def _process_challenge_response(self, ca_prefix: FormalName, request_id: bytes,

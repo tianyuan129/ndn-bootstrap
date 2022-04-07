@@ -1,13 +1,12 @@
-from contextlib import AsyncExitStack
-from typing import Optional, Dict, Callable, Any, Coroutine, List
+from typing import Tuple, List
 
-import sys, os
-import asyncio
+import os
 from tempfile import TemporaryDirectory
 from ndn.encoding import Name
 from ndn.security import KeychainSqlite3, TpmFile
-from ndn.app_support.security_v2 import sign_req
-from ca.client import *
+from ndn.app import NDNApp
+from ndn.app_support.security_v2 import parse_certificate, sign_req
+from ca.client import Client
 
 app = NDNApp()
 
@@ -28,7 +27,7 @@ async def email_verifier(challenge_status: bytes, param_key: bytes, param_value:
     
 async def main() -> int:
 
-    client = Client(app, None, None)
+    client = Client(app)
     with TemporaryDirectory() as tmpdirname:
         pib_file = os.path.join(tmpdirname, 'pib.db')
         tpm_dir = os.path.join(tmpdirname, 'privKeys')

@@ -1,5 +1,4 @@
-from urllib import request
-from ndn.encoding import TlvModel, BytesField, UintField, ModelField, RepeatedField, NameField, TypeNumber
+from ndn.encoding import TlvModel, BytesField, UintField, RepeatedField, TypeNumber
 
 # ApplicationParameters = APPLICATION-PARAMETERS-TYPE TLV-LENGTH
 #                         ecdh-pub

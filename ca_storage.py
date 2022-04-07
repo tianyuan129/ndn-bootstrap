@@ -1,4 +1,5 @@
 from proto.ndncert_proto import *
+from ndn.encoding import NameField, ModelField
 
 TLV_PLACEHOLDER = 1
 

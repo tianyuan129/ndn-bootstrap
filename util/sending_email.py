@@ -3,7 +3,6 @@ import socket
 from configparser import ConfigParser
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
 
 
 def SendingEmail(email: str, param1: str, param2: str, param3: str, config: str):

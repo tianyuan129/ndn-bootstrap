@@ -1,4 +1,5 @@
-from typing import Tuple, Optional
+from os import urandom
+from math import floor
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -9,9 +10,6 @@ from ecdsa import SigningKey, VerifyingKey, NIST256p
 from Cryptodome.Cipher import AES
 
 from proto.ndncert_proto import *
-
-from os import urandom
-from math import floor
 
 class ECDH:
     def __init__(self):
