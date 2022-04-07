@@ -52,7 +52,6 @@ def main() -> int:
     tib = Tib(app, bundle, '~/.ndn-tib-test/')
     async def bootstrap():
         await tib.bootstrap(Name.from_str('/ndn/tianyuan'), select_first, email_verifier)
-
         app.shutdown()
 
     app.run_forever(bootstrap())

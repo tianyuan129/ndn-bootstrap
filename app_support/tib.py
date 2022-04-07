@@ -81,13 +81,23 @@ class Tib(object):
             newid_signer, selector, verifier)
         
         print(f'{Name.to_str(issued_cert_name)}')
-        data_name, meta_info, content, raw_pkt = await self.app.express_interest(
+        data_name, _, _, raw_pkt = await self.app.express_interest(
             issued_cert_name, forwarding_hint=[forwarding_hint], 
             can_be_prefix=False, lifetime=6000, need_raw_packet=True
         )
 
-        retrieved_cert = parse_certificate(raw_pkt)
-        print(f'{Name.to_str(retrieved_cert.name)}')
-        # self.keychain.import_cert()
+        try:
+            retrieved_cert = parse_certificate(raw_pkt)
+            print(f'Installing {Name.to_str(retrieved_cert.name)}')
+        except:
+            print(f'Not a certificate: {Name.to_str(data_name)}')
+            return
+
+        # installing the tmp cert 
+        self.keychain.import_cert(newid_key.name, issued_cert_name, raw_pkt)
+        
+        # todo: applying acutal cert from the real ndncert
+        
+        
         
         

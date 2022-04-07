@@ -276,6 +276,5 @@ class Ca(object):
         self.app.set_interest_filter(self.ca_prefix + '/CA', self._on_interest)
         self.app.set_interest_filter(self.ca_prefix + '/CA/NEW', self.on_new_interest)
         self.app.set_interest_filter(self.ca_prefix + '/CA/CHALLENGE', self.on_challenge_interest)
-        
-        
+
         self.app.run_forever()
