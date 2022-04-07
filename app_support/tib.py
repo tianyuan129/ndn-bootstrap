@@ -82,10 +82,9 @@ class Tib(object):
         
         print(f'{Name.to_str(issued_cert_name)}')
         data_name, meta_info, content, raw_pkt = await self.app.express_interest(
-            issued_cert_name,
-            # cannot use forwarding hint right now because of an issue of python-ndn
-            # issued_cert_name, forwarding_hint=[forwarding_hint], 
-            can_be_prefix=False, lifetime=6000, need_raw_packet=True)
+            issued_cert_name, forwarding_hint=[forwarding_hint], 
+            can_be_prefix=False, lifetime=6000, need_raw_packet=True
+        )
 
         retrieved_cert = parse_certificate(raw_pkt)
         print(f'{Name.to_str(retrieved_cert.name)}')

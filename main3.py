@@ -16,8 +16,8 @@ from ndn.app_support.light_versec import compile_lvs, LvsModel
 app = NDNApp()
 
 async def select_first(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:
-    print(bytes(list[0]).decode())
-    return bytes(list[0]), "email".encode(), "tianyuan@cs.ucla.edu".encode()
+    print(list[0])
+    return list[0], "email".encode(), "tianyuan@cs.ucla.edu".encode()
     
     
 async def email_verifier(challenge_status: bytes, param_key: bytes, param_value: bytes) -> Tuple[bytes, bytes]:

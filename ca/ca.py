@@ -1,3 +1,4 @@
+from functools import cache
 from re import X
 from typing import Optional, Dict
 import plyvel
@@ -115,7 +116,7 @@ class Ca(object):
         self.db.close()
 
     def on_new_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
-        print(f'>> I: {Name.to_str(name)}, {param}')
+        logging.info(f'>> I: {Name.to_str(name)}, {param}')
         request = NewRequest.parse(_app_param)
         ecdh = ECDH()
         pub = request.ecdh_pub
@@ -196,8 +197,12 @@ class Ca(object):
             self.app.put_data(name, content=message_out.encode(), freshness_period=10000, identity=self.ca_prefix)
             
             if cert_state.issued_cert is not None:
-                issued_name = parse_certificate(cert_state.issued_cert)
-                self.cache[Name.to_bytes(issued_name.name)] = cert_state.issued_cert
+                issued_cert = parse_certificate(cert_state.issued_cert)
+                self.cache[Name.to_bytes(issued_cert.name)] = cert_state.issued_cert
+                
+                # create an window for cert retrieval
+                print(f'{Name.to_str(issued_cert.name)}')
+                asyncio.ensure_future(self.serve_cert(issued_cert.name))
 
             # success, put into the approved list
             self.approved_requests.states.append(cert_state)
@@ -242,6 +247,7 @@ class Ca(object):
             self.db.close()
         
     def _on_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
+        print(f'filtered: {Name.to_str(name)}')
         # dispatch to corresponding handlers
         if Name.is_prefix(self.ca_prefix + '/CA/NEW', name):
             self.on_new_interest(name, param, _app_param)
@@ -254,9 +260,22 @@ class Ca(object):
         try:
             self.cache[Name.to_bytes(name)]
         except KeyError:
+            print('not found')
             return
         self.app.put_raw_packet(self.cache[Name.to_bytes(name)])
-        
+
+    async def serve_cert(self, name: FormalName):
+        self.app.set_interest_filter(name, lambda int_name, param, _app_param:
+            self.app.put_raw_packet(self.cache[Name.to_bytes(int_name)])
+        )
+        await asyncio.sleep(5)
+        self.app.unset_interest_filter(name)
+
     def go(self):
-        self.app.route(self.ca_prefix)(self._on_interest)
+        self.app.route(self.ca_prefix + '/CA')(None)
+        self.app.set_interest_filter(self.ca_prefix + '/CA', self._on_interest)
+        self.app.set_interest_filter(self.ca_prefix + '/CA/NEW', self.on_new_interest)
+        self.app.set_interest_filter(self.ca_prefix + '/CA/CHALLENGE', self.on_challenge_interest)
+        
+        
         self.app.run_forever()
