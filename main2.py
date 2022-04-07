@@ -11,8 +11,8 @@ from ca.client import Client
 app = NDNApp()
 
 async def select_first(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:
-    print(list[1])
-    return list[1], "email".encode(), "tianyuan@tianyuan.ndn".encode()
+    print(list[0])
+    return list[0], "email".encode(), "tianyuan@tianyuan.ndn".encode()
     
     
 async def email_verifier(challenge_status: bytes, param_key: bytes, param_value: bytes) -> Tuple[bytes, bytes]:
@@ -35,7 +35,7 @@ async def main() -> int:
         keychain = KeychainSqlite3(pib_file, TpmFile(tpm_dir))
         assert len(keychain) == 0
 
-        ty_id = keychain.touch_identity('/ndn/tianyuan/tianyuan')
+        ty_id = keychain.touch_identity('/ndn/tianyuan')
         ty_key = ty_id.default_key()
         ty_key_name = ty_key.name
         ty_cert_data = parse_certificate(ty_key.default_cert().data)
@@ -45,7 +45,7 @@ async def main() -> int:
         if ty_signer is None:
             print(f'signer is none')
         _, csr = sign_req(ty_key_name, ty_cert_data.content, ty_signer)
-        issued_cert_name, hint = await client.request_signing(Name.from_str('/ndn/tianyuan'), bytes(csr), ty_signer, select_first, email_verifier)
+        issued_cert_name, hint = await client.request_signing(Name.from_str('/ndn'), bytes(csr), ty_signer, select_first, email_verifier)
         print(f'{Name.to_str(issued_cert_name)}, {Name.to_str(hint)}')
 
     return 0

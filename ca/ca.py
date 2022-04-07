@@ -158,7 +158,8 @@ class Ca(object):
             print(f'Not CertState for Request ID: {request_id.hex()}')
             return
         cert_state = self.requests[request_id]
-        
+
+        # checking iv counters
         payload = get_encrypted_message(bytes(cert_state.aes_key), bytes(cert_state.id), message_in)
         request = ChallengeRequest.parse(payload)
         
@@ -191,9 +192,23 @@ class Ca(object):
         
         if response is not None:            
             plaintext = response.encode()
-            message_out, iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), cert_state.iv_counter, 
-                                                            bytes(cert_state.id), plaintext)
-            cert_state.iv_counter = iv_counter
+            # message_out, iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), cert_state.iv_counter, 
+            #                                                 bytes(cert_state.id), plaintext)
+            
+            # todo: iv handlings should tolerate concurrent requests
+            try: 
+                iv_random = self.iv_random
+            except AttributeError:
+                self.iv_random = None
+            try: 
+                iv_random = self.iv_counter
+            except AttributeError:
+                self.iv_counter = None
+
+            message_out, self.iv_random, self.iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), bytes(cert_state.id), 
+                plaintext, self.iv_random, self.iv_counter)
+
+            cert_state.iv_counter = self.iv_counter
             self.app.put_data(name, content=message_out.encode(), freshness_period=10000, identity=self.ca_prefix)
             
             if cert_state.issued_cert is not None:

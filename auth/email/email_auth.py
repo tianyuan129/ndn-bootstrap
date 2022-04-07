@@ -77,7 +77,7 @@ class EmailAuthenticator(Authenticator):
                 cert_state.issued_cert = issued_cert
                 
                 response = ChallengeResponse()
-                response.status = STATUS_PENDING
+                response.status = STATUS_SUCCESS
                 response.issued_cert_name = Name.encode(issued_cert_name)
                 ca_prefix = self.ca_name
                 ca_prefix.append('CA')
