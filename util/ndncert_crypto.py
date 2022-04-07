@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -39,15 +39,19 @@ class ECDH:
             info = info,
             backend = default_backend()
         ).derive(shared_key)
-        
-def gen_encrypted_message(aes_key: bytes, iv_counter: int, associated: bytes, plaintext: bytes) -> Tuple[EncryptedMessage, int]:
+
+def gen_encrypted_message(aes_key: bytes, associated: bytes, plaintext: bytes, 
+                          iv_random: bytes, iv_counter: int):
     # this will auto increment the iv counter
      
     if iv_counter is None:
         iv_counter = 0
+    
+    if iv_random is None:
+        iv_random = urandom(8)
 
     iv_counter = iv_counter + floor((len(plaintext) + 15) / 16)
-    iv = urandom(8) + iv_counter.to_bytes(4, 'big')
+    iv = iv_random + iv_counter.to_bytes(4, 'little')
     cipher = AES.new(aes_key, AES.MODE_GCM, nonce = iv)
     cipher.update(associated)
     ciphertext, tag = cipher.encrypt_and_digest(plaintext)
@@ -56,10 +60,9 @@ def gen_encrypted_message(aes_key: bytes, iv_counter: int, associated: bytes, pl
     message_out.iv = iv
     message_out.tag = tag
     message_out.payload = ciphertext
-    return message_out, iv_counter
+    return message_out, iv_random, iv_counter
 
-def get_encrypted_message(aes_key: bytes, associated: bytes, message_in: EncryptedMessage) -> bytes:
+def get_encrypted_message(aes_key: bytes, associated: bytes, message_in: EncryptedMessage):
     cipher = AES.new(aes_key, AES.MODE_GCM, nonce = message_in.iv)
     cipher.update(associated)
-    # todo: enforce the iv counter checking
     return cipher.decrypt_and_verify(message_in.payload, message_in.tag)
