@@ -101,6 +101,7 @@ class Client(object):
         data_name, meta_info, content = await self.app.express_interest(
             interest_name, app_param = message_out.encode(), must_be_fresh=True, 
             can_be_prefix=False, lifetime=6000, signer=signer)
+        print(f'{Name.to_str(data_name)}')
 
         return await self._process_challenge_response(ca_prefix, request_id, 
                                                       ecdh, iv_counter, signer, 

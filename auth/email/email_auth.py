@@ -73,7 +73,7 @@ class EmailAuthenticator(Authenticator):
                 csr_data = parse_certificate(cert_state.csr)
 
                 signer = self.keychain.get_signer({'cert': self.ca_cert_data.name})
-                issued_cert_name, issued_cert = derive_cert(csr_data.name[:-3], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
+                issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
                 cert_state.issued_cert = issued_cert
                 
                 response = ChallengeResponse()

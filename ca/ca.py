@@ -39,13 +39,25 @@ class Ca(object):
         self.config = config
         self.ca_prefix = self.config['prefix_config']['prefix_name']
                 
-        pib_file = os.path.join(os.getcwd(), 'pib.db')
-        tpm_dir = os.path.join(os.getcwd(), 'privKeys')
-        KeychainSqlite3.initialize(pib_file, 'tpm-file', tpm_dir)
-        self.keychain = KeychainSqlite3(pib_file, TpmFile(tpm_dir))
-        ca_id = self.keychain.touch_identity(self.ca_prefix)
-        ca_cert = ca_id.default_key().default_cert().data
-        self.ca_cert_data = parse_certificate(ca_cert)
+        tib_base = self.config['tib_config']['base_dir']
+
+        basedir = os.path.expanduser(tib_base)
+        if not os.path.exists(basedir):
+            os.makedirs(basedir)
+        tpm_path = os.path.join(basedir, 'privKeys')
+        pib_path = os.path.join(basedir, 'pib.db')
+        KeychainSqlite3.initialize(pib_path, 'tpm-file', tpm_path)
+        self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
+        
+        try:
+            ca_id = self.keychain[self.ca_prefix]
+            ca_cert = ca_id.default_key().default_cert().data
+            self.ca_cert_data = parse_certificate(ca_cert)
+        except:
+            ca_id = self.keychain.touch_identity(self.ca_prefix)
+            ca_cert = ca_id.default_key().default_cert().data
+            self.ca_cert_data = parse_certificate(ca_cert)
+
         self.db_init()
 
         self.app = NDNApp(keychain = self.keychain)
