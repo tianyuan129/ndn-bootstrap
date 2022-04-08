@@ -14,7 +14,8 @@
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
 
-from typing import Optional
+from math import fabs
+from typing import Optional, Tuple
 import os
 from ndn.encoding import Name, FormalName, TlvModel, BytesField, ModelField
 from ndn.app_support.security_v2 import parse_certificate, sign_req
@@ -22,7 +23,10 @@ from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DE
 from ndn.security import TpmFile, KeychainSqlite3
 from ndn.app import NDNApp
 
-from ca.client import Client, Selector, Verifier
+from ca import Ca, Client, Selector, Verifier
+from util.config import get_yaml
+from proto.types import *
+from .lvs_template import define_minimal_trust_zone
 
 TLV_TIB_BUNDLE_ANCHOR = 301
 TLV_TIB_BUNDLE_SCHEMA = 303
@@ -71,14 +75,21 @@ class Tib(object):
         # /<prefix>/KEY/<keyid>/<issuer>/<version>
         auth_prefix = anchor_name[:-4]
         
-        newid = self.keychain.touch_identity(id_name)
-        newid_key = newid.default_key()
-        newid_cert_data = parse_certificate(newid_key.default_cert().data)
-        newid_signer = self.keychain.get_signer({'cert': newid_cert_data.name})
+        if not Name.is_prefix(auth_prefix, id_name):
+            raise InvalidName
+
+        # the name used for authentication
+        id_authname = id_name
+        id_authname.insert(len(auth_prefix), 'auth')
         
-        csr_name, csr = sign_req(newid_key.name, newid_cert_data.content, newid_signer)
+        authid = self.keychain.touch_identity(id_authname)
+        authid_key = authid.default_key()
+        authid_cert_data = parse_certificate(authid_key.default_cert().data)
+        authid_signer = self.keychain.get_signer({'cert': authid_cert_data.name})
+        
+        csr_name, csr = sign_req(authid_key.name, authid_cert_data.content, authid_signer)
         issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
-            newid_signer, selector, verifier)
+            authid_signer, selector, verifier)
         
         print(f'{Name.to_str(issued_cert_name)}')
         data_name, _, _, raw_pkt = await self.app.express_interest(
@@ -94,10 +105,32 @@ class Tib(object):
             return
 
         # installing the tmp cert 
-        self.keychain.import_cert(newid_key.name, issued_cert_name, raw_pkt)
+        self.keychain.import_cert(authid_key.name, issued_cert_name, raw_pkt)
         
         # todo: applying acutal cert from the real ndncert
         
         
+    async def start_trust_zone(self, local_app: NDNApp, id_name: FormalName, **kwargs) -> Tuple[TibBundle, Ca]:
+        local_anchor_id = self.keychain.touch_identity(id_name)
+        local_anchor_key = local_anchor_id.default_key()
+        local_anchor_data = parse_certificate(local_anchor_key.default_cert().data)
+        local_anchor_signer = self.keychain.get_signer({'cert': local_anchor_data.name})
+        local_lvs = define_minimal_trust_zone(local_anchor_id.name)
         
+        # generate TIB bundle
+        bundle = TibBundle()
+        bundle.anchor = local_anchor_key.default_cert().data
+        bundle.schema = compile_lvs(local_lvs)
+        
+        config = []
+        if 'authenticator' in kwargs:
+            config_path = kwargs['authenticator']
+            config = get_yaml(config_path)
+        # start local Authenticator
+        ca = Ca(local_app, config)
+        ca.go()
+        
+        #todo: start local NDNCERT
+        
+        return bundle, ca 
         

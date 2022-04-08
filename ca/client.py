@@ -3,12 +3,8 @@ from typing import Callable, Tuple, List
 from ndn.app import NDNApp, InterestNack, InterestTimeout, InterestCanceled, ValidationFailure
 from ndn.encoding import Name, Component, FormalName
 
-from proto.ndncert_proto import *
+from proto import *
 from util.ndncert_crypto import *
-
-Selector = Callable[[List[bytes]], Tuple[bytes, bytes, bytes]]
-
-Verifier = Callable[[bytes, bytes, bytes], Tuple[bytes, bytes]]
 
 class Client(object):
     def __init__(self, app: NDNApp):

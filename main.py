@@ -7,6 +7,7 @@ from ndn.app import NDNApp
 from ndn.encoding import Name
 from ca.ca import *
 
+app = NDNApp()
 
 def process_cmd_opts():
     """
@@ -81,10 +82,10 @@ def main() -> int:
     config_logging(config['logging_config'])
 
     try:
-        Ca(config).go()
+        Ca(app, config).go()
     except FileNotFoundError:
         print('Error: could not connect to NFD.')
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    app.run_forever(after_start=main())
