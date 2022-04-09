@@ -7,6 +7,9 @@ from ndn.app import NDNApp
 from ndn.encoding import Name
 from ca.ca import *
 
+from app_support.tib import Tib, TibBundle
+from ndn.app_support.light_versec import compile_lvs, LvsModel
+
 app = NDNApp()
 
 def process_cmd_opts():
@@ -80,6 +83,28 @@ def main() -> int:
     config = process_config(cmdline_args)
     print(config)
     config_logging(config['logging_config'])
+
+
+    basedir = os.path.expanduser('~/.ndn-tib-test/')
+    tpm_path = os.path.join(basedir, 'privKeys')
+    pib_path = os.path.join(basedir, 'pib.db')
+    keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
+    anchor_id = keychain['/ndn']
+    anchor_key = anchor_id.default_key()
+    
+    lvs = r'''
+    #KEY: "KEY"/_/_/_version & { _version: $eq_type("v=0") }
+    #NewResponse: /site/CA/_func/_ & { _func: "NEW"} <= #anchor
+    #ChaResponse: /site/CA/_func/_/_param & { _func: "CHALLENGE" } <= #anchor
+    #TmpCert: /site/"auth"/_/#KEY <= #anchor
+    #anchor: /site/#KEY & { site: "ndn" }
+    '''
+    bundle = TibBundle()
+    bundle.anchor = anchor_key.default_cert().data
+    bundle.schema = compile_lvs(lvs)
+    
+    # load the NDNApp with validator and keychain
+    tib = Tib(app, bundle, '~/.ndn-tib-test/')
 
     try:
         Ca(app, config).go()

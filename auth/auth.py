@@ -7,15 +7,17 @@ from ca_storage import *
 from util.sending_email import *
 
 from ndn.encoding import Name, FormalName
+from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS
 
 from datetime import datetime
 
 class Authenticator(object):
-    def __init__(self, config: Dict, auth_mean: str):
+    def __init__(self, app: NDNApp, config: Dict, auth_mean: str):
         self.config = config
         self.auth_mean = auth_mean
+        self.app = app
         
         
     @abstractmethod
@@ -73,10 +75,13 @@ class Authenticator(object):
         return False
 
     def accept_from_semantic(self, target_auth, cert_state: CertState) -> bool:
+        if 'semantic_check' not in self.config['auth_config'][self.auth_mean]:
+            # bypass
+            return True
+        semantic_policy = self.config['auth_config'][self.auth_mean]['semantic_check']
         cert_name = parse_certificate(cert_state.csr).name
 
         # semantic check
-        semantic_policy = self.config['auth_config'][self.auth_mean]['semantic_check']
         translator = getattr(target_auth, semantic_policy['translator'])
         translated_name = translator(target_auth, bytes(cert_state.iden_value).decode('utf-8'))
         lvs = semantic_policy['lvs']
@@ -89,6 +94,9 @@ class Authenticator(object):
             return user_func(target_auth, cert_state)
 
     def accept_from_membership(self, target_auth, cert_state: CertState) -> bool:
+        if 'membership_check' not in self.config['auth_config'][self.auth_mean]:
+            # bypass
+            return True
         # membership check
         membership_policy = self.config['auth_config'][self.auth_mean]['membership_check']
         user_func = getattr(target_auth, membership_policy['user_func'])

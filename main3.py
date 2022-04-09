@@ -17,7 +17,7 @@ app = NDNApp()
 
 async def select_first(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:
     print(list[0])
-    return list[0], "email".encode(), "tianyuan@cs.ucla.edu".encode()
+    return list[0], "email".encode(), "tianyuan@tianyuan.ndn".encode()
     
     
 async def email_verifier(challenge_status: bytes, param_key: bytes, param_value: bytes) -> Tuple[bytes, bytes]:
@@ -39,7 +39,8 @@ def main() -> int:
     #KEY: "KEY"/_/_/_version & { _version: $eq_type("v=0") }
     #NewResponse: /site/CA/_func/_ & { _func: "NEW"} <= #anchor
     #ChaResponse: /site/CA/_func/_/_param & { _func: "CHALLENGE" } <= #anchor
-    #TmpCert: /site/_/#KEY <= #anchor 
+    #TmpCert: /site/"auth"/_/#KEY <= #anchor 
+    #Cert: /site/_/#KEY <= #anchor 
     #anchor: /site/#KEY & { site: "ndn" }
     '''
     bundle = TibBundle()

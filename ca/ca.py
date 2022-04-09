@@ -183,7 +183,7 @@ class Ca(object):
         # cast the corresponding challenge actor
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do
-        actor.__init__(actor, self.ca_cert_data, self.keychain, self.requests, self.config)
+        actor.__init__(actor, self.app, self.ca_cert_data, self.keychain, self.requests, self.config)
         response, err = actor.actions[cert_state.status](actor, request, cert_state)
 
         cert_state.auth_mean = request.selected_challenge

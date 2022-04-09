@@ -3,7 +3,8 @@ from typing import Callable, Tuple, List
 from ndn.app import NDNApp, InterestNack, InterestTimeout, InterestCanceled, ValidationFailure
 from ndn.encoding import Name, Component, FormalName
 
-from proto import *
+from proto.ndncert_proto import *
+from proto.types import *
 from util.ndncert_crypto import *
 
 class Client(object):

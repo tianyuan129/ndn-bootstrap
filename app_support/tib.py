@@ -14,7 +14,6 @@
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
 
-from math import fabs
 from typing import Optional, Tuple
 import os
 from ndn.encoding import Name, FormalName, TlvModel, BytesField, ModelField
@@ -27,6 +26,10 @@ from ca import Ca, Client, Selector, Verifier
 from util.config import get_yaml
 from proto.types import *
 from .lvs_template import define_minimal_trust_zone
+
+from Cryptodome.Hash import SHA256
+from Cryptodome.PublicKey import ECC
+from Cryptodome.Signature import DSS, pkcs1_15
 
 TLV_TIB_BUNDLE_ANCHOR = 301
 TLV_TIB_BUNDLE_SCHEMA = 303
@@ -67,9 +70,9 @@ class Tib(object):
         tpm_path = os.path.join(self.basedir, 'privKeys')
         pib_path = os.path.join(self.basedir, 'pib.db')
         self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
-        
+
     async def bootstrap(self, id_name: FormalName, selector: Selector, verifier: Verifier):
-        client = Client(self.app, self.anchor_data, self.schema)
+        client = Client(self.app)
         
         anchor_name = self.anchor_data.name
         # /<prefix>/KEY/<keyid>/<issuer>/<version>
@@ -79,15 +82,15 @@ class Tib(object):
             raise InvalidName
 
         # the name used for authentication
-        id_authname = id_name
+        id_authname = []
+        id_authname[:] = id_name[:]
         id_authname.insert(len(auth_prefix), 'auth')
         
         authid = self.keychain.touch_identity(id_authname)
         authid_key = authid.default_key()
         authid_cert_data = parse_certificate(authid_key.default_cert().data)
         authid_signer = self.keychain.get_signer({'cert': authid_cert_data.name})
-        
-        csr_name, csr = sign_req(authid_key.name, authid_cert_data.content, authid_signer)
+        _, csr = sign_req(authid_key.name, authid_cert_data.content, authid_signer)
         issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
             authid_signer, selector, verifier)
         
@@ -96,19 +99,59 @@ class Tib(object):
             issued_cert_name, forwarding_hint=[forwarding_hint], 
             can_be_prefix=False, lifetime=6000, need_raw_packet=True
         )
-
         try:
             retrieved_cert = parse_certificate(raw_pkt)
-            print(f'Installing {Name.to_str(retrieved_cert.name)}')
+            print(f'Installing tmp certificate: {Name.to_str(retrieved_cert.name)}')
         except:
             print(f'Not a certificate: {Name.to_str(data_name)}')
             return
-
         # installing the tmp cert 
         self.keychain.import_cert(authid_key.name, issued_cert_name, raw_pkt)
         
         # todo: applying acutal cert from the real ndncert
+        # always select proof-of-possession challenge from NDNCERT
+        async def _select_possession(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:    
+            for challenge in list:
+                if challenge == 'possession':
+                    return challenge, 'issued-cert'.encode(), authid_key.default_cert().data
+            raise ProtoError
         
+        # use the authid_signer to sign the nonce
+        async def _verify_possession(challenge_status: bytes, param_key: bytes, param_value: bytes) -> Tuple[bytes, bytes]:
+            try:
+                assert bytes(challenge_status).decode() == 'need-proof'
+                assert bytes(param_key).decode() == 'nonce'
+                assert param_value is not None
+            except AssertionError:
+                raise ProtoError
+            
+            wire = bytearray(70)
+            assert authid_signer.write_signature_value(wire, [memoryview(param_value)]) == len(wire)        
+            return 'proof'.encode(), bytes(wire)   
+        
+        formal_id = self.keychain.touch_identity(id_name)
+        formal_key = formal_id.default_key()
+        formal_cert_data = parse_certificate(formal_key.default_cert().data)
+        formal_signer = self.keychain.get_signer({'cert': formal_cert_data.name})
+        _, csr = sign_req(formal_key.name, formal_cert_data.content, formal_signer)
+        issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
+            formal_signer, _select_possession, _verify_possession)
+                 
+        print(f'{Name.to_str(issued_cert_name)}')
+        data_name, _, _, raw_pkt = await self.app.express_interest(
+            issued_cert_name, forwarding_hint=[forwarding_hint], 
+            can_be_prefix=False, lifetime=6000, need_raw_packet=True
+        )
+
+        try:
+            retrieved_cert = parse_certificate(raw_pkt)
+            print(f'Installing final certificate: {Name.to_str(retrieved_cert.name)}')
+        except:
+            print(f'Not a certificate: {Name.to_str(data_name)}')
+            return
+
+        # installing the formal cert
+        self.keychain.import_cert(formal_key.name, issued_cert_name, raw_pkt)
         
     async def start_trust_zone(self, local_app: NDNApp, id_name: FormalName, **kwargs) -> Tuple[TibBundle, Ca]:
         local_anchor_id = self.keychain.touch_identity(id_name)

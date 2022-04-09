@@ -10,3 +10,10 @@ class InvalidName(Exception):
     Raised when an name request is invalid
     """
     pass
+
+class ProtoError(Exception):
+    """
+    Raised when the remote end doesn't support this protocol, or not 
+    running as expected
+    """
+    pass
