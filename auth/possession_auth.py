@@ -121,10 +121,6 @@ class PossessionAuthenticator(Authenticator):
             errs.code = ERROR_INVALID_PARAMTERS[0]
             errs.info = ERROR_INVALID_PARAMTERS[1].encode()
             return None, errs
-
-    def plain_split(self, identity_value: str) -> FormalName: 
-        index = identity_value.rindex("@")
-        return Name.from_str('/' + str(identity_value[:index]) + '/' + str(identity_value[index + 1:]))
     
     # map the inputs to the function blocks
     actions = {
