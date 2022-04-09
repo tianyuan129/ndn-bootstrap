@@ -153,12 +153,20 @@ class Tib(object):
         # installing the formal cert
         self.keychain.import_cert(formal_key.name, issued_cert_name, raw_pkt)
         
-    async def start_trust_zone(self, local_app: NDNApp, id_name: FormalName, **kwargs) -> Tuple[TibBundle, Ca]:
+    async def construct_minimal_trust_zone(self, local_app: NDNApp, id_name: FormalName, **kwargs) -> Tuple[TibBundle, Ca]:
         local_anchor_id = self.keychain.touch_identity(id_name)
         local_anchor_key = local_anchor_id.default_key()
         local_anchor_data = parse_certificate(local_anchor_key.default_cert().data)
         local_anchor_signer = self.keychain.get_signer({'cert': local_anchor_data.name})
+        
+        
+        local_issuer_str = 'formal-issuer'
+        variable_pattern = '/"{formal_issuer}"'
+        variable_pattern.format(formal_issuer = local_issuer_str)
+        
         local_lvs = define_minimal_trust_zone(local_anchor_id.name)
+        
+        
         
         # generate TIB bundle
         bundle = TibBundle()
@@ -174,6 +182,8 @@ class Tib(object):
         ca.go()
         
         #todo: start local NDNCERT
+        
+        
         
         return bundle, ca 
         
