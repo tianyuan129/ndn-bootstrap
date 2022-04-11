@@ -1,13 +1,12 @@
 ---
 prefix_config:
   # the CA's identity prefix
-  prefix_name: '/ndn'
+  prefix_name: '{ca_prefix}'
 
 tib_config:
-  base_dir: '~/.ndn-tib-test/'
+  base_dir: '~/.ndn/tib/{zone_hex}/'
 
 auth_config:
-  operator_email: 'tianyuan@cs.ucla.edu'
   email:
     mail_conf: 'user-auth.conf'
     # acceptance policy: semantic check
@@ -16,9 +15,9 @@ auth_config:
 
       # domain_split: alice@gmail.com -> /alice/gmail/com
       # plain_split: alice@gmail.com -> /alice/gmail.com
-      translator: plain_split      
+      translator: {translator}   
       lvs: '#email: /_/_
-            #root: /"ndn"
+            #root: {zone_prefix_in_lvs}
             #KEY: "KEY"/_/_/_version & { _version: $eq_type("v=0") }
             #cert: #root/"auth"/_/#KEY <= #email'
 
