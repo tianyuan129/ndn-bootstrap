@@ -14,25 +14,23 @@
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
 
+from msilib.schema import Component
+from re import I
 from typing import Optional, Tuple
 import os
 from ndn.encoding import Name, FormalName, TlvModel, BytesField, ModelField
 from ndn.app_support.security_v2 import parse_certificate, sign_req
-from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS, LvsModel, lvs_validator
+from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, LvsModel, lvs_validator
 from ndn.security import TpmFile, KeychainSqlite3
 from ndn.app import NDNApp
 
-from ca import Ca, Client, Selector, Verifier
-from util.config import get_yaml
+from ca import Client, Selector, Verifier
 from proto.types import *
-from .lvs_template import define_minimal_trust_zone, name_to_hardened_pattern
-
-from Cryptodome.Hash import SHA256
-from Cryptodome.PublicKey import ECC
-from Cryptodome.Signature import DSS, pkcs1_15
+from .lvs_template import define_minimal_trust_zone
 
 TLV_TIB_BUNDLE_ANCHOR = 301
 TLV_TIB_BUNDLE_SCHEMA = 303
+TLV_TIB_BUNDLE_SAFEBAG = 305
 
 class TibBundle(TlvModel):
     anchor = BytesField(TLV_TIB_BUNDLE_ANCHOR)
@@ -153,58 +151,19 @@ class Tib(object):
         # installing the formal cert
         self.keychain.import_cert(formal_key.name, issued_cert_name, raw_pkt)
         
-    async def construct_minimal_trust_zone(self, local_app: NDNApp, id_name: FormalName, **kwargs):
+    async def construct_minimal_trust_zone(self, id_name: FormalName, **kwargs):
         try:
             local_anchor_id = self.keychain[id_name]
         except:
             local_anchor_id = self.keychain.touch_identity(id_name)
         local_anchor_key = local_anchor_id.default_key()
-        local_anchor_data = parse_certificate(local_anchor_key.default_cert().data)
-        local_anchor_signer = self.keychain.get_signer({'cert': local_anchor_data.name})
-
-        local_issuer_str = 'formal-issuer'
-        variable_pattern = '/"{formal_issuer}"'
-        variable_pattern.format(formal_issuer = local_issuer_str)
         
-        local_lvs = define_minimal_trust_zone(local_anchor_id.name)
+        need_tmpcert = False
+        if 'need_tmpcert' in kwargs:
+            need_tmpcert = kwargs['need_tmpcert']
+        local_lvs = define_minimal_trust_zone(local_anchor_id.name, need_tmpcert=need_tmpcert)
         # generate TIB bundle
         bundle = TibBundle()
         bundle.anchor = local_anchor_key.default_cert().data
         bundle.schema = compile_lvs(local_lvs)
-        
-        config = []
-        if 'authenticator' in kwargs:
-            config_path = kwargs['authenticator']
-            config = get_yaml(config_path)
-        else:
-            # load the template and fill in paramters
-            config = get_yaml('../app_support/auth.config.template')
-            _ca_prefix = Name.to_str(id_name) + '/auth'
-            _zone_hex = Name.to_bytes(id_name).hex()
-            _translator = 'plain_split'
-            _zone_prefix_in_lvs = name_to_hardened_pattern(id_name)
-            
-            config['prefix_config']['prefix_name'] = _ca_prefix
-            config['tib_config']['base_dir'] = config['tib_config']['base_dir'].format(zone_hex=_zone_hex)
-            config['auth_config']['email']['semantic_check']['translator'] = _translator
-            lvs_template = config['auth_config']['email']['semantic_check']['lvs']
-            config['auth_config']['email']['semantic_check']['lvs'] = lvs_template.format(zone_prefix_in_lvs = _zone_prefix_in_lvs)
-        # start local Authenticator
-        auth = Ca(local_app, config)
-        auth.go()
-        
-        #todo: start local NDNCERT
-        if 'need_issuer' in kwargs:
-            need_issuer = kwargs['need_issuer']
-            if need_issuer:
-                # load the template and fill in paramters
-                config = get_yaml('../app_support/issuer.config.template')
-                _ca_prefix = Name.to_str(id_name) + '/auth'
-                _zone_hex = Name.to_bytes(id_name).hex()
-                config['prefix_config']['prefix_name'] = _ca_prefix
-                config['tib_config']['base_dir'] = config['tib_config']['base_dir'].format(zone_hex=_zone_hex)
-                issuer = Ca(local_app, config)
-                issuer.go()
-                return bundle, auth, issuer
-        return bundle, auth
-        
+        return bundle

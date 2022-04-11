@@ -11,7 +11,7 @@ lvs_template = r'''
 #TmpCert: /site/"auth"/_/#KEY <= #Anchor 
 #FormalCert: /site/_/#KEY <= #Issuer
 #Issuer: /site/"cert"/#KEY <= #Anchor
-#Anchor: /site/#KEY & { site: "ndn" }
+#Anchor: /site/#KEY
 '''
 
 TEMPLATE_KEY = '''
@@ -122,6 +122,7 @@ def define_ndncert_proto(zone_name: FormalName, **kwargs):
     
     # format issuer varname
     _issuer_varname = ''
+    _issuer_varpattern = ''
     if 'issuer_var' in kwargs:
         _issuer_varname = kwargs['issuer_var']
         _issuer_varpattern = gen_temp_pattern(len(_issuer_varname))
@@ -179,27 +180,35 @@ def define_generic_data_rule(rule: str, zone_name: FormalName, **kwargs):
         variable_pattern = _variable_pattern)
     return _generic_rule + _prepared_constraints + _prepared_signer
 
-def define_minimal_trust_zone(zone_name: FormalName):
+def define_minimal_trust_zone(zone_name: FormalName, **kwargs):
     lvs = ''
     lvs += define_key()
     # only allow 1 length suffix
     lvs += define_anchor(zone_name)
-    lvs += define_tmpcert(zone_name, '/"auth"/_')
     
     # define the first ndncert for authenticator
-    lvs += define_ndncert_proto(zone_name, issuer_var = Name.from_str('/auth'), 
-        index = 0, issuer_id = 'Anchor', harden = True)
-    # derive the issuer from anchor
-    lvs += define_generic_cert(zone_name, '/"issuer"', 'Issuer', 'Anchor')
-    # define the second ndncert for cert issuer
-    lvs += define_ndncert_proto(zone_name, issuer_var = Name.from_str('/cert'),
-        index = 1, issuer_id = 'Issuer', harden = True)
+    cert_issuer = 'Anchor'
+    if 'need_tmpcert' in kwargs:
+        need_tmpcert = kwargs['need_tmpcert']
+        if need_tmpcert:
+            lvs += define_tmpcert(zone_name, '/"auth"/_')
+            lvs += define_ndncert_proto(zone_name, issuer_var = Name.from_str('/auth'), 
+                index = 0, issuer_id = 'Anchor', harden = True)
+            # derive the issuer from anchor
+            lvs += define_generic_cert(zone_name, '/"issuer"', 'Issuer', 'Anchor')
+            # define the second ndncert for cert issuer
+            lvs += define_ndncert_proto(zone_name, issuer_var = Name.from_str('/cert'),
+                index = 1, issuer_id = 'Issuer', harden = True)
+            cert_issuer = 'Issuer'
+    
+    # define ndncert proto for cert issuer
+    lvs += define_ndncert_proto(zone_name, index = 1, issuer_id = cert_issuer, harden = True)
     
     # derive other certs from the cert issuer
     # EntityClassi: i len suffix after @zone_name 
-    lvs += define_generic_cert(zone_name, '/suffix1', 'EntityClass1', 'Issuer')
+    lvs += define_generic_cert(zone_name, '/suffix1', 'EntityClass1', cert_issuer)
     # lvs += define_generic_cert(zone_name, '/_/_', 'EntityClass2', 'Issuer')
-    
+
     # define app data produced by EntityClass
     # DataClassi: rule applied to EntityClassi
     lvs += define_generic_data_rule('DataClass1', zone_name,
@@ -210,4 +219,4 @@ def define_minimal_trust_zone(zone_name: FormalName):
     # a little formatting
     return lvs.replace("\n\n", "\n")
 
-print(define_minimal_trust_zone(Name.from_str('/ndn/try/best')))
+print(define_minimal_trust_zone(Name.from_str('/ndn/try/best'), need_tmpcert=True))
