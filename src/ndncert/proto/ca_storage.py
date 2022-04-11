@@ -1,4 +1,4 @@
-from proto.ndncert_proto import *
+from .ndncert_proto import *
 from ndn.encoding import NameField, ModelField
 
 TLV_PLACEHOLDER = 1
@@ -40,10 +40,3 @@ class PendingCertStates(TlvModel):
 
 class RejectedCertStates(TlvModel):
     states = RepeatedField(ModelField(1, CertState))
-    
-class ManualApproval(TlvModel):
-    state = CertState()
-    expires = UintField(1)
-
-class ManualApprovalList(TlvModel):
-    approvals = RepeatedField(ModelField(1, ManualApproval))

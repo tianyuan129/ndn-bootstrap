@@ -12,14 +12,14 @@ from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS
 
-from proto.ndncert_proto import *
-from util.ndncert_crypto import *
-from ca_storage import *
-from util.sending_email import *
+from ndncert.proto.ndncert_proto import *
+from ndncert.util.ndncert_crypto import *
+from ndncert.proto.ca_storage import *
+from ndncert.util.sending_email import *
 
 from Cryptodome.Cipher import AES
 
-from auth.auth import Authenticator
+from ..auth import Authenticator
 
 class EmailAuthenticator(Authenticator):
     def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict):

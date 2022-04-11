@@ -1,11 +1,11 @@
-from typing import Callable, Tuple, List
+from typing import Tuple
 
 from ndn.app import NDNApp, InterestNack, InterestTimeout, InterestCanceled, ValidationFailure
 from ndn.encoding import Name, Component, FormalName
 
-from proto.ndncert_proto import *
-from proto.types import *
-from util.ndncert_crypto import *
+from ndncert.proto.ndncert_proto import *
+from ndncert.proto.types import *
+from ndncert.util.ndncert_crypto import *
 
 class Client(object):
     def __init__(self, app: NDNApp):

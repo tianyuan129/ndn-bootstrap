@@ -14,10 +14,10 @@ from ndn.app import NDNApp, Validator, ValidationFailure, InterestTimeout, Inter
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.utils import gen_nonce
 from ndn.security.validator.known_key_validator import verify_ecdsa
-from proto.ndncert_proto import *
-from util.ndncert_crypto import *
-from ca_storage import *
-from util.sending_email import *
+from ndncert.proto.ndncert_proto import *
+from ndncert.util.ndncert_crypto import *
+from ndncert.proto.ca_storage import *
+from ndncert.util.sending_email import *
 
 from Cryptodome.Hash import SHA256
 from Cryptodome.PublicKey import ECC

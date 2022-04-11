@@ -1,14 +1,15 @@
 import argparse
-from util.config import get_yaml
+from ndncert.util.config import get_yaml
 import logging
 import pkg_resources
-import sys
 from ndn.app import NDNApp
-from ndn.encoding import Name
-from ca.ca import *
+import os
 
-from app_support.tib import Tib, TibBundle
-from ndn.app_support.light_versec import compile_lvs, LvsModel
+# from app_support.tib import Tib, TibBundle
+from ndn.security import KeychainSqlite3, TpmFile
+from ndn.app_support.light_versec import compile_lvs
+from ndncert.ca.ca import Ca
+from ndncert.app_support.tib import Tib, TibBundle
 
 app = NDNApp()
 
@@ -44,7 +45,10 @@ def process_config(cmdline_args):
     """
     Read and process config file. Some config options are overridden by cmdline args.
     """
-    config = get_yaml(cmdline_args.config)
+    config = cmdline_args.config
+    if config is None:
+        config = 'ndncert-ca.conf'
+    config = get_yaml(config)
     if cmdline_args.ca_name != None:
         config['prefix_config']['prefix_name'] = cmdline_args.ca_name
     return config

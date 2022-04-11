@@ -13,9 +13,6 @@
 #       3.1. using trust schema to validate the received data/interest packet
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
-
-from msilib.schema import Component
-from re import I
 from typing import Optional, Tuple
 import os
 from ndn.encoding import Name, FormalName, TlvModel, BytesField, ModelField
@@ -24,13 +21,12 @@ from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS,
 from ndn.security import TpmFile, KeychainSqlite3
 from ndn.app import NDNApp
 
-from ca import Client, Selector, Verifier
-from proto.types import *
+from ndncert.ca.client import Client, Selector, Verifier
+from ndncert.proto.types import *
 from .lvs_template import define_minimal_trust_zone
 
 TLV_TIB_BUNDLE_ANCHOR = 301
 TLV_TIB_BUNDLE_SCHEMA = 303
-TLV_TIB_BUNDLE_SAFEBAG = 305
 
 class TibBundle(TlvModel):
     anchor = BytesField(TLV_TIB_BUNDLE_ANCHOR)

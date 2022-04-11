@@ -3,10 +3,7 @@ from pkg_resources import resource_filename
 
 
 def get_yaml(path):
-    # if fall back to internal config file, so that CA can run without any external configs
-    if path == None:
-        path = resource_filename(__name__, '../ndncert-ca.conf')
-        
+    # if fall back to internal config file, so that CA can run without any external configs       
     try:
         with open(path, 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)

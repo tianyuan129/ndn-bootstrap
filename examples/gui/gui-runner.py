@@ -1,14 +1,9 @@
-import asyncio
-import time
 import os
 
-from util.config import get_yaml
 import plyvel
 import logging
-from ca_storage import *
+from proto.ca_storage import *
 from ndn.encoding import Name
-from PIL import Image
-import json
 from aiohttp import web
 import socketio
 import aiohttp_jinja2
@@ -215,10 +210,10 @@ def gui_main():
         if db_result:
             approved_bindings = IdentityBindingList.parse(db_result)            
             for approved in approved_bindings.bindings:
-                if user_approved.auth_mean == apr.auth_mean or \
-                   user_approved.iden_key == rejected.iden_key or \
-                   user_approved.iden_value == rejected.iden_value or \
-                   user_approved.name == rejected.name:
+                if approved.auth_mean == user_approved.auth_mean or \
+                   approved.iden_key == user_approved.iden_key or \
+                   approved.iden_value == user_approved.iden_value or \
+                   approved.name == user_approved.name:
                    not_found = False
         
         if not_found:

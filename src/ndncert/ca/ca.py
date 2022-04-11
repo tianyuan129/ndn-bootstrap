@@ -9,17 +9,16 @@ import asyncio
 from datetime import datetime
 
 from ndn.app import NDNApp
-from ndn.encoding import Name, Component, InterestParam, BinaryStr, FormalName
+from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
 from ndn.app_support.security_v2 import parse_certificate
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.utils import gen_nonce
 
-from proto.ndncert_proto import *
-from util.ndncert_crypto import *
+from ndncert.proto.ndncert_proto import *
+from ndncert.util.ndncert_crypto import *
+from ndncert.proto.ca_storage import *
 
-from auth import *
-
-from ca_storage import *
+from ndncert.auth import *
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
