@@ -1,5 +1,5 @@
-from typing import Tuple, Dict, Any
-from abc import ABC, abstractmethod
+from typing import Tuple, Dict
+from abc import abstractmethod
 import plyvel
 
 from ndncert.proto.ndncert_proto import *

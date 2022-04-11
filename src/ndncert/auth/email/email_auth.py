@@ -17,8 +17,6 @@ from ndncert.util.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
 from ndncert.util.sending_email import *
 
-from Cryptodome.Cipher import AES
-
 from ..auth import Authenticator
 
 class EmailAuthenticator(Authenticator):
@@ -56,8 +54,9 @@ class EmailAuthenticator(Authenticator):
             errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
             return None, errs
         
-        # print(f'email = {email}')
-        SendingEmail(email, secret, Name.to_str(self.ca_name) + '/CA', Name.to_str(cert_name), 'auth/email/user-auth.conf')
+        dirname = os.path.dirname(__file__)
+        filename = os.path.join(dirname, 'user-auth.conf')
+        SendingEmail(email, secret, Name.to_str(self.ca_name) + '/CA', Name.to_str(cert_name), filename)
         
         cert_state.auth_key = CHALLENGE_EMAIL_PARAMETER_KEY_CODE.encode()
         cert_state.auth_value = secret.encode()
