@@ -116,7 +116,7 @@ class Tib(object):
         async def _select_possession(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:    
             for challenge in list:
                 if challenge == 'possession':
-                    return challenge, 'issued-cert'.encode(), authid_key.default_cert().data
+                    return challenge, 'issued-cert'.encode(), authid_key[issued_cert_name].data
             raise ProtoError
         
         # use the authid_signer to sign the nonce

@@ -1,12 +1,10 @@
-from curses import flash
-from re import S
 from typing import Tuple, Dict, Any
 from datetime import datetime
 
 import os
 
-from ndn.encoding import Name, FormalName, SignatureType, Name, parse_data, SignaturePtrs
-from ndn.app import NDNApp, Validator, ValidationFailure, InterestTimeout, InterestNack
+from ndn.encoding import Name, FormalName, Name, parse_data
+from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.utils import gen_nonce
 from ndn.security.validator.known_key_validator import verify_ecdsa
@@ -17,7 +15,7 @@ from ndncert.util.sending_email import *
 
 from Cryptodome.Hash import SHA256
 from Cryptodome.PublicKey import ECC
-from Cryptodome.Signature import DSS, pkcs1_15
+from Cryptodome.Signature import DSS
 
 from .auth import Authenticator
 
@@ -28,7 +26,6 @@ class PossessionAuthenticator(Authenticator):
         self.storage = requests_storage
         self.ca_name = self.ca_cert_data.name[:-4]
         self.config = config
-        self.db_dir = os.path.expanduser('~/.ndncert-ca-python/')
         Authenticator.__init__(self, app, self.config, 'possession')
     
     @staticmethod
@@ -42,46 +39,44 @@ class PossessionAuthenticator(Authenticator):
         except ValueError:
             return False
 
-    def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         cert_state.auth_mean = request.selected_challenge
         cert_state.iden_key = request.parameter_key
         cert_state.iden_value = request.parameter_value
         
         # parsing the issued credential
-        # credential_name, _, _, sig_ptrs = parse_data(cert_state.iden_value)
+        credential_name, _, _, sig_ptrs = parse_data(cert_state.iden_value)
         credential = parse_certificate(cert_state.iden_value)
         credential_name = credential.name
-        
+
         # obtain public key
-        cert_name = credential.signature_info.key_locator.name
-        print(f'Possessing: {Name.to_str(credential_name)} <- {Name.to_str(cert_name)} ...')   
-        # todo: fetching the direct upstream through key locator     
-        # assuming crypto verification succeeded. continue..
-        secret = os.urandom(16)
-        response = ChallengeResponse()
-        response.status = STATUS_CHALLENGE
-        response.challenge_status = CHALLENGE_STATUS_NEED_PROOF.encode()
-        response.remaining_tries = 1
-        response.remaining_time = 300
-        response.parameter_key = CHALLENGE_POSS_PARAMETER_KEY_NONCE.encode()
-        response.parameter_value = secret
-        # cert_name = parse_certificate(cert_state.csr).name
-        
-        # acceptor fails early
-        if not self.accept(self, self, cert_state):
+        signing_cert = sig_ptrs.signature_info.key_locator.name
+        print(f'Possessing: {Name.to_str(credential_name)} <- {Name.to_str(signing_cert)} ...')
+        valid = await self.app.data_validator(credential_name, sig_ptrs)
+        if not valid:
             errs = ErrorMessage()
             errs.code = ERROR_NAME_NOT_ALLOWED[0]
             errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
             return None, errs
-        
-        # write back
-        cert_state.auth_key = CHALLENGE_POSS_PARAMETER_KEY_NONCE.encode()
-        cert_state.auth_value = secret
-        cert_state.status = STATUS_CHALLENGE
-        self.storage[cert_state.id] = cert_state
-        return response, None
+        else:
+            secret = os.urandom(16)
+            response = ChallengeResponse()
+            response.status = STATUS_CHALLENGE
+            response.challenge_status = CHALLENGE_STATUS_NEED_PROOF.encode()
+            response.remaining_tries = 1
+            response.remaining_time = 300
+            response.parameter_key = CHALLENGE_POSS_PARAMETER_KEY_NONCE.encode()
+            response.parameter_value = secret
+            # cert_name = parse_certificate(cert_state.csr).name
 
-    def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+            # write back
+            cert_state.auth_key = CHALLENGE_POSS_PARAMETER_KEY_NONCE.encode()
+            cert_state.auth_value = secret
+            cert_state.status = STATUS_CHALLENGE
+            self.storage[cert_state.id] = cert_state
+            return response, None
+
+    async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         if request.parameter_key == CHALLENGE_POSS_PARAMETER_KEY_PROOF.encode():
             # verify signaure
             credential = parse_certificate(cert_state.iden_value)

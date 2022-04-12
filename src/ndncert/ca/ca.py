@@ -46,9 +46,12 @@ class Ca(object):
             os.makedirs(basedir)
         tpm_path = os.path.join(basedir, 'privKeys')
         pib_path = os.path.join(basedir, 'pib.db')
-        KeychainSqlite3.initialize(pib_path, 'tpm-file', tpm_path)
-        self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
-        
+        try:
+            self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
+        except:
+            KeychainSqlite3.initialize(pib_path, 'tpm-file', tpm_path)
+            self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
+
         try:
             ca_id = self.keychain[self.ca_prefix]
             ca_cert = ca_id.default_key().default_cert().data
@@ -58,7 +61,7 @@ class Ca(object):
             ca_cert = ca_id.default_key().default_cert().data
             self.ca_cert_data = parse_certificate(ca_cert)
 
-        self.db_init()
+        self.db_init(basedir)
         self.app = app
         app.keychain = self.keychain
 
@@ -76,13 +79,13 @@ class Ca(object):
     #         wb.write()
     #         self.db.close()
 
-    def db_init(self):
+    def db_init(self, basedir):
         logging.info("Server starts its initialization")
         # create or get existing state
         # Step One: Meta Info
         # 1. get system prefix from storage (from Level DB)
         import os
-        self.db_dir = os.path.expanduser('~/.ndncert-ca-python/')
+        self.db_dir = os.path.join(basedir, 'ndncert-ca')
         if not os.path.exists(self.db_dir):
             os.makedirs(self.db_dir)
         self.db = plyvel.DB(self.db_dir, create_if_missing=True)
@@ -114,13 +117,13 @@ class Ca(object):
         logging.info("Server finishes the step 2 initialization")
         self.db.close()
 
-    def on_new_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
-        logging.info(f'>> I: {Name.to_str(name)}, {param}')
+    async def on_new_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
+        logging.debug(f'>> I: {Name.to_str(name)}, {param}')
         request = NewRequest.parse(_app_param)
         ecdh = ECDH()
         pub = request.ecdh_pub
         csr_data = parse_certificate(request.cert_request)
-        print(f'CSR name: {Name.to_str(csr_data.name)}')
+        logging.info(f'CSR name: {Name.to_str(csr_data.name)}')
         
         response = NewResponse()
         response.ecdh_pub = ecdh.pub_key_encoded
@@ -139,22 +142,23 @@ class Ca(object):
         cert_state.id = response.request_id
         cert_state.csr = request.cert_request
         self.requests[response.request_id] = cert_state
-        print(f'Request ID: {response.request_id.hex()}')
+        logging.info(f'Request ID: {response.request_id.hex()}')
 
         self.pending_requests.states.append(cert_state)
         self.db = plyvel.DB(self.db_dir)
         self.db.put(b'pending_requests', self.pending_requests.encode())
         self.db.close()
+        logging.debug(f'Putting this CSR into Pending Requests list')
         
-    def on_challenge_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
-        logging.info(f'>> I: {Name.to_str(name)}, {param}')
+    async def on_challenge_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
+        logging.debug(f'>> I: {Name.to_str(name)}, {param}')
         message_in = EncryptedMessage.parse(_app_param)
         request_id = name[len(Name.from_str(self.ca_prefix)) + 2][-8:]
 
         try:
             self.requests[request_id]
         except KeyError:
-            print(f'Not CertState for Request ID: {request_id.hex()}')
+            logging.error(f'Not CertState for Request ID: {request_id.hex()}')
             return
         cert_state = self.requests[request_id]
 
@@ -171,7 +175,7 @@ class Ca(object):
         
         # if challenge not available
         if not challenge_type in self.config['auth_config']:
-            print(f'challenge not available')
+            logging.error(f'Challenge not available')
             errs = ErrorMessage()
             errs.code = ERROR_INVALID_PARAMTERS[0]
             errs.info = ERROR_INVALID_PARAMTERS[1].encode()
@@ -183,7 +187,9 @@ class Ca(object):
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do
         actor.__init__(actor, self.app, self.ca_cert_data, self.keychain, self.requests, self.config)
-        response, err = actor.actions[cert_state.status](actor, request, cert_state)
+        # maybe use asyncio to create task?
+        
+        response, err = await actor.actions[cert_state.status](actor, request, cert_state)
 
         cert_state.auth_mean = request.selected_challenge
         cert_state.iden_key = request.parameter_key
@@ -256,7 +262,6 @@ class Ca(object):
                     not_found = False
             if not_found:
                 self.rejected_bindings.bindings.append(binding)
-                print('appeneded')
             self.db.put(b'rejected_bindings', self.rejected_bindings.encode())
             self.db.close()
         
@@ -264,10 +269,10 @@ class Ca(object):
         print(f'filtered: {Name.to_str(name)}')
         # dispatch to corresponding handlers
         if Name.is_prefix(self.ca_prefix + '/CA/NEW', name):
-            self.on_new_interest(name, param, _app_param)
+            asyncio.create_task(self.on_new_interest(name, param, _app_param))
             return
         if Name.is_prefix(self.ca_prefix + '/CA/CHALLENGE', name):
-            self.on_challenge_interest(name, param, _app_param)
+            asyncio.create_task(self.on_challenge_interest(name, param, _app_param))
             return
         
         # check whether can respond from cert cache
@@ -288,5 +293,3 @@ class Ca(object):
     def go(self):
         self.app.route(self.ca_prefix + '/CA')(None)
         self.app.set_interest_filter(self.ca_prefix + '/CA', self._on_interest)
-        self.app.set_interest_filter(self.ca_prefix + '/CA/NEW', self.on_new_interest)
-        self.app.set_interest_filter(self.ca_prefix + '/CA/CHALLENGE', self.on_challenge_interest)

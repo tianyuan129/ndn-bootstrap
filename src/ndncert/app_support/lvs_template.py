@@ -218,5 +218,3 @@ def define_minimal_trust_zone(zone_name: FormalName, **kwargs):
         signer = 'EntityClass1')
     # a little formatting
     return lvs.replace("\n\n", "\n")
-
-print(define_minimal_trust_zone(Name.from_str('/ndn/try/best'), need_tmpcert=True))

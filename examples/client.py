@@ -19,7 +19,6 @@ async def email_verifier(challenge_status: bytes, param_key: bytes, param_value:
     assert param_key is None
     assert param_value is None
     assert bytes(challenge_status).decode() == "need-code"
-    
     val = input("Enter your code: ")
     print(val)
 

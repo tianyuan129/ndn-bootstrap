@@ -47,8 +47,9 @@ def process_config(cmdline_args):
     """
     config = cmdline_args.config
     if config is None:
-        config = 'ndncert-ca.conf'
-    config = get_yaml(config)
+        dirname = os.path.dirname(__file__)
+        filename = os.path.join(dirname, 'ndncert-ca.conf')
+    config = get_yaml(filename)
     if cmdline_args.ca_name != None:
         config['prefix_config']['prefix_name'] = cmdline_args.ca_name
     return config

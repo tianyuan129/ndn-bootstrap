@@ -20,7 +20,10 @@ async def email_verifier(challenge_status: bytes, param_key: bytes, param_value:
     assert param_key is None
     assert param_value is None
     assert bytes(challenge_status).decode() == "need-code"
-    return "code".encode(), "2345".encode()
+    val = input("Enter your code: ")
+    print(val)
+
+    return "code".encode(), val.encode()
     
 def main() -> int:
 

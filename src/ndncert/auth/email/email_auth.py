@@ -1,16 +1,13 @@
-from curses import flash
 from typing import Tuple, Dict, Any
 from datetime import datetime
 
-from os import urandom
-import os
-from math import floor
-import plyvel
+import logging, os
+from random import randint
 
 from ndn.encoding import Name, FormalName
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
-from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS
+from ndn.utils import gen_nonce
 
 from ndncert.proto.ndncert_proto import *
 from ndncert.util.ndncert_crypto import *
@@ -19,6 +16,7 @@ from ndncert.util.sending_email import *
 
 from ..auth import Authenticator
 
+
 class EmailAuthenticator(Authenticator):
     def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict):
         self.ca_cert_data = ca_cert_data
@@ -26,12 +24,11 @@ class EmailAuthenticator(Authenticator):
         self.storage = requests_storage
         self.ca_name = self.ca_cert_data.name[:-4]
         self.config = config
-        self.db_dir = os.path.expanduser('~/.ndncert-ca-python/')
         self.app = app
         Authenticator.__init__(self, app, config, 'email')
         
     
-    def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         cert_state.auth_mean = request.selected_challenge
         cert_state.iden_key = request.parameter_key
         cert_state.iden_value = request.parameter_value
@@ -43,10 +40,13 @@ class EmailAuthenticator(Authenticator):
         response.remaining_time = 300
         
         email = bytes(cert_state.iden_value).decode("utf-8")
-        secret = "2345"
+        EMAIL_CHALLANGE_CODE_SIZE = 6
+        secret = ''
+        for i in range(EMAIL_CHALLANGE_CODE_SIZE):
+            secret += str(randint(0,9))
+        logging.info(f'Secret for Request ID {cert_state.id.hex()} is {secret}')
         cert_name = parse_certificate(cert_state.csr).name
-        
-        
+
         # acceptor fails early
         if not self.accept(self, self, cert_state):
             errs = ErrorMessage()
@@ -65,7 +65,7 @@ class EmailAuthenticator(Authenticator):
         self.storage[cert_state.id] = cert_state
         return response, None
 
-    def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         if cert_state.auth_key == request.parameter_key:
             if cert_state.auth_value == request.parameter_value:
                 print(f'Success, should issue certificate')

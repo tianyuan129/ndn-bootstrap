@@ -18,14 +18,20 @@ class Authenticator(object):
         self.config = config
         self.auth_mean = auth_mean
         self.app = app
+        self.db_dir = self.config['tib_config']['base_dir']
         
+        basedir = self.config['tib_config']['base_dir']
+        import os
+        basedir = os.path.expanduser(basedir)
+        # it should be there, if not, we have an problem
+        self.db_dir = os.path.join(basedir, 'ndncert-ca')
         
     @abstractmethod
-    def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         pass
 
     @abstractmethod
-    def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         pass
 
     def autopass(self, cert_state: CertState) -> bool:
@@ -48,12 +54,12 @@ class Authenticator(object):
         return False
     
     
-    def accept_from_approval_list(target_auth, cert_state: CertState) -> bool:
+    def accept_from_approval_list(self, cert_state: CertState) -> bool:
         cert_name = parse_certificate(cert_state.csr).name
         identity_name = cert_name[:-4]
 
         # clean up all expired bindings
-        db = plyvel.DB(target_auth.db_dir)
+        db = plyvel.DB(self.db_dir)
         db_result = db.get(b'approved_bindings')
         if db_result:
             approved_bindings = IdentityBindingList.parse(db_result)
@@ -104,7 +110,7 @@ class Authenticator(object):
 
     def accept(self, target_auth, cert_state: CertState) -> bool:
         # check for manual approval list
-        if self.accept_from_approval_list(target_auth, cert_state):
+        if self.accept_from_approval_list(self, cert_state):
             return True
         if not self.accept_from_semantic(self, target_auth, cert_state):
             return False
