@@ -68,7 +68,7 @@ class EmailAuthenticator(Authenticator):
     async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
         if cert_state.auth_key == request.parameter_key:
             if cert_state.auth_value == request.parameter_value:
-                print(f'Success, should issue certificate')
+                logging.info(f'Identity verification succeed, should issue certificate')
                 cert_state.status = STATUS_CHALLENGE
                 csr_data = parse_certificate(cert_state.csr)
 
@@ -86,10 +86,10 @@ class EmailAuthenticator(Authenticator):
                 self.storage[cert_state.id] = cert_state
                 return response, None
             else:
-                print(f'Wrong, fail immediately')
                 errs = ErrorMessage()
                 errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
                 errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
+                logging.error(f'Identity verification failed, returning errors {ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
                 return None, errs
         else:
             errs = ErrorMessage()

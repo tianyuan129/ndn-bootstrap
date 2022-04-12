@@ -1,6 +1,6 @@
 from typing import Tuple, Dict
 from abc import abstractmethod
-import plyvel
+import plyvel, logging
 
 from ndncert.proto.ndncert_proto import *
 from ndncert.proto.ca_storage import *
@@ -42,7 +42,7 @@ class Authenticator(object):
 
     def autofail_but_notify(self, cert_state: CertState) -> bool:
         operator_email = self.config['auth_config']['operator_email']
-        print(f'Sending email to the operator {operator_email}')
+        logging.info(f'Sending email to the operator {operator_email}')
         
         ca_name = self.config['prefix_config']['prefix_name'] + '/CA'
         cert_name = parse_certificate(cert_state.csr).name

@@ -14,7 +14,7 @@
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
 from typing import Optional, Tuple
-import os
+import logging, os
 from ndn.encoding import Name, Component, NonStrictName, FormalName, TlvModel, BytesField, ModelField
 from ndn.app_support.security_v2 import parse_certificate, sign_req
 from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, LvsModel, lvs_validator
@@ -97,16 +97,16 @@ class Tib(object):
         issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
             authid_signer, selector, verifier)
         
-        print(f'{Name.to_str(issued_cert_name)}')
+        logging.debug(f'Retrieving certificate {Name.to_str(issued_cert_name)}...')
         data_name, _, _, raw_pkt = await self.app.express_interest(
             issued_cert_name, forwarding_hint=[forwarding_hint], 
             can_be_prefix=False, lifetime=6000, need_raw_packet=True
         )
         try:
             retrieved_cert = parse_certificate(raw_pkt)
-            print(f'Installing tmp certificate: {Name.to_str(retrieved_cert.name)}')
+            logging.info(f'Installing tmp certificate: {Name.to_str(retrieved_cert.name)}')
         except:
-            print(f'Not a certificate: {Name.to_str(data_name)}')
+            logging.error(f'Not a certificate: {Name.to_str(data_name)}')
             return
         # installing the tmp cert 
         self.keychain.import_cert(authid_key.name, issued_cert_name, raw_pkt)
@@ -140,7 +140,7 @@ class Tib(object):
         issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
             formal_signer, _select_possession, _verify_possession)
                  
-        print(f'{Name.to_str(issued_cert_name)}')
+        logging.debug(f'Retrieving certificate {Name.to_str(issued_cert_name)}...')
         data_name, _, _, raw_pkt = await self.app.express_interest(
             issued_cert_name, forwarding_hint=[forwarding_hint], 
             can_be_prefix=False, lifetime=6000, need_raw_packet=True
@@ -148,9 +148,9 @@ class Tib(object):
 
         try:
             retrieved_cert = parse_certificate(raw_pkt)
-            print(f'Installing final certificate: {Name.to_str(retrieved_cert.name)}')
+            logging.info(f'Installing final certificate: {Name.to_str(retrieved_cert.name)}')
         except:
-            print(f'Not a certificate: {Name.to_str(data_name)}')
+            logging.error(f'Not a certificate: {Name.to_str(data_name)}')
             return
 
         # installing the formal cert
@@ -194,8 +194,6 @@ class Tib(object):
         # append version
         bundle_name.append(Component.from_version(timestamp()))
         
-        print(f'{Name.to_str(bundle_name)}')
-        
         # /<prefix>/BUNDLE/<keyid>/<version>
-        
+        logging.debug(f'Generating bundle {Name.to_str(bundle_name)}...')        
         return self.sign_data(bundle_name, bundle_wire)

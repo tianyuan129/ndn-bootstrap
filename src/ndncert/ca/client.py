@@ -1,4 +1,5 @@
 from typing import Tuple
+import logging
 
 from ndn.app import NDNApp, InterestNack, InterestTimeout, InterestCanceled, ValidationFailure
 from ndn.encoding import Name, Component, FormalName, tlv_model
@@ -23,14 +24,14 @@ class Client(object):
         except AttributeError:
             self.iv_random_last = random_part
         except AssertionError:
-            print(f'Random part of AES IV not equal')
+            raise ProtoError(f'Random part of AES IV not equal')
       
         try:
             assert counter >= self.counter_last
         except AttributeError:
             self.counter_last = counter
         except AssertionError:
-            print(f'Counter part should be monotonically increasing')  
+            raise ProtoError(f'Counter part should be monotonically increasing')
         
         aes_key = ecdh.derived_key
         plaintext = get_encrypted_message(bytes(aes_key), request_id, message_in)
@@ -50,19 +51,9 @@ class Client(object):
                 bytes(self.iv_random), iv_counter)
             interest_name = ca_prefix + Name.from_str('/CA/CHALLENGE')
             interest_name = interest_name + [Component.from_bytes(request_id)]
-            try:
-                data_name, meta_info, content = await self.app.express_interest(
-                    interest_name, app_param = message_out.encode(), must_be_fresh=True, 
-                    can_be_prefix=False, lifetime=6000, signer=signer)
-            except InterestNack as e:
-                print(f'Nacked with reason={e.reason}')
-            except InterestTimeout:
-                print(f'Timeout')
-            except InterestCanceled:
-                print(f'Canceled')
-            except ValidationFailure:
-                print(f'Data failed to validate')
-            print(f'Receiving Data {Name.to_str(data_name)}')
+            _, _, content = await self.app.express_interest(
+                interest_name, app_param = message_out.encode(), must_be_fresh=True, 
+                can_be_prefix=False, lifetime=6000, signer=signer)
             
             # if this is an error message
             try:
@@ -88,26 +79,16 @@ class Client(object):
         new_request.cert_request = csr
         
         interest_name = ca_prefix + Name.from_str('/CA/NEW')
-        try:
-            data_name, _, content = await self.app.express_interest(
-                interest_name, app_param = new_request.encode(), must_be_fresh=True, 
-                can_be_prefix=False, lifetime=6000, signer=signer)
-        except InterestNack as e:
-            print(f'Nacked with reason={e.reason}')
-        except InterestTimeout:
-            print(f'Timeout')
-        except InterestCanceled:
-            print(f'Canceled')
-        except ValidationFailure:
-            print(f'Data failed to validate')
-
+        data_name, _, content = await self.app.express_interest(
+            interest_name, app_param = new_request.encode(), must_be_fresh=True, 
+            can_be_prefix=False, lifetime=6000, signer=signer)
         try:
             NewResponse.parse(content)
         except tlv_model.DecodeError as e:
             raise ProtoError(f'New response format err: {e.reason}')
         
         new_response = NewResponse.parse(content)
-        print(f'Receiving Data {Name.to_str(data_name)}')
+        logging.debug(f'Receiving Data {Name.to_str(data_name)}')
         
         # diffie-hellman
         request_id = new_response.request_id
@@ -134,19 +115,10 @@ class Client(object):
         interest_name = ca_prefix + Name.from_str('/CA/CHALLENGE')
         interest_name = interest_name + [Component.from_bytes(request_id)] 
         
-        try:
-            data_name, _, content = await self.app.express_interest(
-                interest_name, app_param = message_out.encode(), must_be_fresh=True, 
-                can_be_prefix=False, lifetime=6000, signer=signer)
-            print(f'Receiving Data {Name.to_str(data_name)}')
-        except InterestNack as e:
-            print(f'Nacked with reason={e.reason}')
-        except InterestTimeout:
-            print(f'Timeout')
-        except InterestCanceled:
-            print(f'Canceled')
-        except ValidationFailure:
-            print(f'Data failed to validate')
+        data_name, _, content = await self.app.express_interest(
+            interest_name, app_param = message_out.encode(), must_be_fresh=True, 
+            can_be_prefix=False, lifetime=6000, signer=signer)
+        logging.debug(f'Receiving Data {Name.to_str(data_name)}')
 
         # if this is an error message
         try:
@@ -158,7 +130,7 @@ class Client(object):
         else:   
             return await self._process_challenge_response(ca_prefix, request_id, 
                 ecdh, iv_counter, signer,
-                EncryptedMessage.parse(content), verifier,
+                message_in, verifier,
                 selected)
         
     

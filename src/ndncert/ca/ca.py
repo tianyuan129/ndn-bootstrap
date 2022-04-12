@@ -20,11 +20,6 @@ from ndncert.proto.ca_storage import *
 
 from ndncert.auth import *
 
-logging.basicConfig(format='[{asctime}]{levelname}:{message}',
-                    datefmt='%Y-%m-%d %H:%M:%S',
-                    level=logging.INFO,
-                    style='{')
-
 class Ca(object):
     def __init__(self, app: NDNApp, config: Dict):
         #todo: customize the storage type
@@ -221,7 +216,7 @@ class Ca(object):
                 self.cache[Name.to_bytes(issued_cert.name)] = cert_state.issued_cert
                 
                 # create an window for cert retrieval
-                print(f'{Name.to_str(issued_cert.name)}')
+                logging.debug(f'Register a short-lived interest filter to allow retrieve {Name.to_str(issued_cert.name)}...')
                 asyncio.ensure_future(self.serve_cert(issued_cert.name))
 
             # success, put into the approved list
@@ -266,7 +261,6 @@ class Ca(object):
             self.db.close()
         
     def _on_interest(self, name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
-        print(f'filtered: {Name.to_str(name)}')
         # dispatch to corresponding handlers
         if Name.is_prefix(self.ca_prefix + '/CA/NEW', name):
             asyncio.create_task(self.on_new_interest(name, param, _app_param))
@@ -279,7 +273,6 @@ class Ca(object):
         try:
             self.cache[Name.to_bytes(name)]
         except KeyError:
-            print('not found')
             return
         self.app.put_raw_packet(self.cache[Name.to_bytes(name)])
 
@@ -289,6 +282,7 @@ class Ca(object):
         )
         await asyncio.sleep(5)
         self.app.unset_interest_filter(name)
+        logging.info(f'Unregister the interest filter for {Name.to_str(name)}...')
 
     def go(self):
         self.app.route(self.ca_prefix + '/CA')(None)

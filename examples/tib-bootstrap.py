@@ -1,6 +1,6 @@
 from typing import Tuple, List
 
-import os
+import logging, os
 from ndn.encoding import Name
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.app import NDNApp
@@ -9,10 +9,14 @@ from ndn.app_support.light_versec import compile_lvs
 
 from ndncert.app_support.tib import Tib, TibBundle
 
+logging.basicConfig(format='[{asctime}]{levelname}:{message}',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.INFO,
+                    style='{')
+
 app = NDNApp()
 
 async def select_first(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:
-    print(list[0])
     return list[0], "email".encode(), "tianyuan@tianyuan.ndn".encode()
     
     

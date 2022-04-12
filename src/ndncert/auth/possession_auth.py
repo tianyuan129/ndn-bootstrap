@@ -1,7 +1,7 @@
 from typing import Tuple, Dict, Any
 from datetime import datetime
 
-import os
+import logging, os
 
 from ndn.encoding import Name, FormalName, Name, parse_data
 from ndn.app import NDNApp
@@ -51,12 +51,13 @@ class PossessionAuthenticator(Authenticator):
 
         # obtain public key
         signing_cert = sig_ptrs.signature_info.key_locator.name
-        print(f'Possessing: {Name.to_str(credential_name)} <- {Name.to_str(signing_cert)} ...')
+        logging.info(f'Verifying credential: {Name.to_str(credential_name)} <= {Name.to_str(signing_cert)} ...')
         valid = await self.app.data_validator(credential_name, sig_ptrs)
         if not valid:
             errs = ErrorMessage()
             errs.code = ERROR_NAME_NOT_ALLOWED[0]
             errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
+            logging.info(f'Credential {Name.to_str(credential_name)} is not allowed in trust model')
             return None, errs
         else:
             secret = os.urandom(16)
@@ -84,7 +85,7 @@ class PossessionAuthenticator(Authenticator):
             nonce = cert_state.auth_value
             proof = request.parameter_value
             if self._verify_raw_ecdsa(pub_key, bytes(nonce), bytes(proof)):
-                print(f'Success, should issue certificate')
+                logging.info(f'Identity verification succeed, should issue certificate')
                 cert_state.status = STATUS_CHALLENGE
                 csr_data = parse_certificate(cert_state.csr)
 
@@ -102,10 +103,10 @@ class PossessionAuthenticator(Authenticator):
                 self.storage[cert_state.id] = cert_state
                 return response, None
             else:
-                print(f'Crypto verification failed')
                 errs = ErrorMessage()
                 errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
                 errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
+                logging.info(f'Identity verification failed, returning errors {ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
                 return None, errs
         else:
             errs = ErrorMessage()
