@@ -13,7 +13,7 @@ class InvalidName(Exception):
 
 class ProtoError(Exception):
     """
-    Raised when the remote end doesn't support this protocol, or not 
-    running as expected
+    Raised when the remote end doesn't support this protocol, 
+    or the result is not success
     """
     pass

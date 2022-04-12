@@ -1,13 +1,13 @@
-from typing import List
+from typing import Tuple, List
 
 import os
 from ndn.encoding import Name
 from ndn.security import KeychainSqlite3, TpmFile
+from ndn.app import NDNApp
 from ndn.app_support.security_v2 import sign_req
-from ca.client import *
-
-from app_support.tib import Tib, TibBundle
 from ndn.app_support.light_versec import compile_lvs
+
+from ndncert.app_support.tib import Tib, TibBundle
 
 app = NDNApp()
 
@@ -44,7 +44,7 @@ def main() -> int:
     bundle.schema = compile_lvs(lvs)
     
     # package = bundle.encode()
-    # print(package)
+    # print(package) 
        
     tib = Tib(app, bundle, '~/.ndn-tib-test/')
     async def bootstrap():

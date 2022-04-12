@@ -15,10 +15,11 @@
 #       4.1. configuring necessary pieces to become a trust zone controller
 from typing import Optional, Tuple
 import os
-from ndn.encoding import Name, FormalName, TlvModel, BytesField, ModelField
+from ndn.encoding import Name, Component, NonStrictName, FormalName, TlvModel, BytesField, ModelField
 from ndn.app_support.security_v2 import parse_certificate, sign_req
 from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, LvsModel, lvs_validator
 from ndn.security import TpmFile, KeychainSqlite3
+from ndn.utils import timestamp
 from ndn.app import NDNApp
 
 from ndncert.ca.client import Client, Selector, Verifier
@@ -28,9 +29,17 @@ from .lvs_template import define_minimal_trust_zone
 TLV_TIB_BUNDLE_ANCHOR = 301
 TLV_TIB_BUNDLE_SCHEMA = 303
 
+# a bundle Data packet should have the following name
+# /<prefix>/BUNDLE/<keyid>/<version>
 class TibBundle(TlvModel):
     anchor = BytesField(TLV_TIB_BUNDLE_ANCHOR)
     schema = ModelField(TLV_TIB_BUNDLE_SCHEMA, LvsModel)
+
+class NoSigningKey(Exception):
+    """
+    Raised when no appropriate signing key is available
+    """
+    pass
 
 class Tib(object):
     # this will load the app with data_validator
@@ -163,3 +172,30 @@ class Tib(object):
         bundle.anchor = local_anchor_key.default_cert().data
         bundle.schema = compile_lvs(local_lvs)
         return bundle
+    
+    def sign_data(self, name: NonStrictName, content: bytes):
+        # locate the matching signing certificate
+        signer_name = self.checker.suggest(name, self.keychain)
+        if signer_name is None:
+            raise NoSigningKey
+        signer = self.keychain.get_signer({'cert', signer_name})
+        # use the suggested key to sign
+        return self.app.prepare_data(name, content = content, signer = signer)
+        
+    def sign_bundle_data(self, bundle_wire: bytes):
+        # parsing to obtain the zone prefix
+        bundle = TibBundle.parse(bundle_wire)
+        trust_anchor_data = parse_certificate(bundle.anchor)
+        bundle_name = []
+        # copy till to the keyid
+        bundle_name[:] = trust_anchor_data.name[:-2]
+        # replace KEY => BUNDLE
+        bundle_name[-2] = Component.from_str('BUNDLE')
+        # append version
+        bundle_name.append(Component.from_version(timestamp()))
+        
+        print(f'{Name.to_str(bundle_name)}')
+        
+        # /<prefix>/BUNDLE/<keyid>/<version>
+        
+        return self.sign_data(bundle_name, bundle_wire)

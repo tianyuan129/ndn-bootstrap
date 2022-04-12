@@ -1,7 +1,7 @@
 from typing import Tuple
 
 from ndn.app import NDNApp, InterestNack, InterestTimeout, InterestCanceled, ValidationFailure
-from ndn.encoding import Name, Component, FormalName
+from ndn.encoding import Name, Component, FormalName, tlv_model
 
 from ndncert.proto.ndncert_proto import *
 from ndncert.proto.types import *
@@ -62,12 +62,20 @@ class Client(object):
                 print(f'Canceled')
             except ValidationFailure:
                 print(f'Data failed to validate')
-
             print(f'Receiving Data {Name.to_str(data_name)}')
-            return await self._process_challenge_response(ca_prefix, request_id, 
-                                                          ecdh, iv_counter, signer, 
-                                                          EncryptedMessage.parse(content), verifier,
-                                                          selected)
+            
+            # if this is an error message
+            try:
+                message_in = EncryptedMessage.parse(content)
+            except tlv_model.DecodeError:
+                err = ErrorMessage.parse(content)
+                err_info = bytes(err.info).decode("utf-8")
+                raise ProtoError(f'Err code {err.code}: {err_info}')
+            else:
+                return await self._process_challenge_response(ca_prefix, request_id, 
+                    ecdh, iv_counter, signer, 
+                    message_in, verifier,
+                    selected)
             
         if challenge_response.status == STATUS_SUCCESS:
             return challenge_response.issued_cert_name, challenge_response.forwarding_hint
@@ -93,6 +101,11 @@ class Client(object):
         except ValidationFailure:
             print(f'Data failed to validate')
 
+        try:
+            NewResponse.parse(content)
+        except tlv_model.DecodeError as e:
+            raise ProtoError(f'New response format err: {e.reason}')
+        
         new_response = NewResponse.parse(content)
         print(f'Receiving Data {Name.to_str(data_name)}')
         
@@ -135,10 +148,18 @@ class Client(object):
         except ValidationFailure:
             print(f'Data failed to validate')
 
-        return await self._process_challenge_response(ca_prefix, request_id, 
-                                                      ecdh, iv_counter, signer,
-                                                      EncryptedMessage.parse(content), verifier,
-                                                      selected)
+        # if this is an error message
+        try:
+            message_in = EncryptedMessage.parse(content)
+        except tlv_model.DecodeError:
+            err = ErrorMessage.parse(content)
+            err_info = bytes(err.info).decode("utf-8")
+            raise ProtoError(f'Err code {err.code}: {err_info}')
+        else:   
+            return await self._process_challenge_response(ca_prefix, request_id, 
+                ecdh, iv_counter, signer,
+                EncryptedMessage.parse(content), verifier,
+                selected)
         
     
             
