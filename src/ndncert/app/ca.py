@@ -14,6 +14,7 @@ from ndn.app_support.security_v2 import parse_certificate
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.utils import gen_nonce
 
+from ndncert.app_support.tib import Tib
 from ndncert.proto.ndncert_proto import *
 from ndncert.util.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
@@ -21,7 +22,7 @@ from ndncert.proto.ca_storage import *
 from ndncert.auth import *
 
 class Ca(object):
-    def __init__(self, app: NDNApp, config: Dict):
+    def __init__(self, app: NDNApp, config: Dict, tib: Tib):
         #todo: customize the storage type
         self.requests = {}
         
@@ -33,19 +34,8 @@ class Ca(object):
         self.cache = {}
         self.config = config
         self.ca_prefix = self.config['prefix_config']['prefix_name']
-                
-        tib_base = self.config['tib_config']['base_dir']
-
-        basedir = os.path.expanduser(tib_base)
-        if not os.path.exists(basedir):
-            os.makedirs(basedir)
-        tpm_path = os.path.join(basedir, 'privKeys')
-        pib_path = os.path.join(basedir, 'pib.db')
-        try:
-            self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
-        except:
-            KeychainSqlite3.initialize(pib_path, 'tpm-file', tpm_path)
-            self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
+        self.tib = tib
+        self.keychain = self.tib.keychain
 
         try:
             ca_id = self.keychain[self.ca_prefix]
@@ -56,7 +46,8 @@ class Ca(object):
             ca_cert = ca_id.default_key().default_cert().data
             self.ca_cert_data = parse_certificate(ca_cert)
 
-        self.db_init(basedir)
+        # save to tib base
+        self.db_init(self.tib.get_path())
         self.app = app
         app.keychain = self.keychain
 
@@ -84,12 +75,6 @@ class Ca(object):
         if not os.path.exists(self.db_dir):
             os.makedirs(self.db_dir)
         self.db = plyvel.DB(self.db_dir, create_if_missing=True)
-        ret = self.db.get(b'ca_prefix')
-        if ret:
-            logging.info(f'Found ca prefix from db: {ret.decode()}')
-            self.ca_prefix = ret.decode()
-        else:
-            self.db.put(b'ca_prefix', self.ca_prefix.encode())
 
         # Step Two: App Layer Support (from Level DB)
         ret = self.db.get(b'approved_requests')
@@ -127,9 +112,10 @@ class Ca(object):
         for auth_method in self.config['auth_config']:
             if str(auth_method) != 'operator_email':
                 response.challenges.append(str(auth_method).encode())
+                
+        raw_pkt = self.tib.sign_data(name, response.encode(), freshness_period=10000)
+        self.app.put_raw_packet(raw_pkt)
 
-        self.app.put_data(name, content=response.encode(), freshness_period=10000, identity=self.ca_prefix)
-        
         cert_state = CertState()
         ecdh.encrypt(bytes(pub), response.salt, response.request_id)
         cert_state.aes_key = ecdh.derived_key
@@ -174,14 +160,16 @@ class Ca(object):
             errs = ErrorMessage()
             errs.code = ERROR_INVALID_PARAMTERS[0]
             errs.info = ERROR_INVALID_PARAMTERS[1].encode()
-            self.app.put_data(name, content=err.encode(), freshness_period=10000, identity=self.ca_prefix)
+            raw_pkt = self.tib.sign_data(name, err.encode(), freshness_period=10000)
+            self.app.put_raw_packet(raw_pkt)
             return
         
         challenge_str = challenge_type.capitalize() + 'Authenticator'
         # cast the corresponding challenge actor
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do
-        actor.__init__(actor, self.app, self.ca_cert_data, self.keychain, self.requests, self.config)
+        actor.__init__(actor, self.app, self.ca_cert_data, self.keychain, 
+            self.requests, self.config, self.db_dir)
         # maybe use asyncio to create task?
         
         response, err = await actor.actions[cert_state.status](actor, request, cert_state)
@@ -209,7 +197,8 @@ class Ca(object):
                 plaintext, self.iv_random, self.iv_counter)
 
             cert_state.iv_counter = self.iv_counter
-            self.app.put_data(name, content=message_out.encode(), freshness_period=10000, identity=self.ca_prefix)
+            raw_pkt = self.tib.sign_data(name, message_out.encode(), freshness_period=10000)
+            self.app.put_raw_packet(raw_pkt)
             
             if cert_state.issued_cert is not None:
                 issued_cert = parse_certificate(cert_state.issued_cert)
@@ -225,8 +214,9 @@ class Ca(object):
             self.db.put(b'approved_requests', self.approved_requests.encode())
             self.db.close()
         else:
-            assert err is not None          
-            self.app.put_data(name, content=err.encode(), freshness_period=10000, identity=self.ca_prefix)
+            assert err is not None
+            raw_pkt = self.tib.sign_data(name, err.encode(), freshness_period=10000)
+            self.app.put_raw_packet(raw_pkt)
             # rejected, put into the rejected list
             self.rejected_requests.states.append(cert_state)
             self.db = plyvel.DB(self.db_dir)

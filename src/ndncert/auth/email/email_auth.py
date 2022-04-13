@@ -18,14 +18,14 @@ from ..auth import Authenticator
 
 
 class EmailAuthenticator(Authenticator):
-    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict):
+    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict, db_dir: str):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
         self.storage = requests_storage
         self.ca_name = self.ca_cert_data.name[:-4]
         self.config = config
         self.app = app
-        Authenticator.__init__(self, app, config, 'email')
+        Authenticator.__init__(self, app, config, 'email', db_dir)
         
     
     async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:

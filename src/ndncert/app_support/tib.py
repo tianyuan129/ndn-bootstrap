@@ -14,15 +14,20 @@
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
 from typing import Optional, Tuple
+from base64 import b64encode, b64decode
+from math import ceil
+from Cryptodome.PublicKey import ECC
 import logging, os
-from ndn.encoding import Name, Component, NonStrictName, FormalName, TlvModel, BytesField, ModelField
+from ndn.encoding import Name, Component, parse_data, make_data,  \
+     NonStrictName, FormalName, TlvModel, BytesField, ModelField,MetaInfo
 from ndn.app_support.security_v2 import parse_certificate, sign_req
 from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, LvsModel, lvs_validator
-from ndn.security import TpmFile, KeychainSqlite3
+from ndn.security import TpmFile, KeychainSqlite3, verify_ecdsa
 from ndn.utils import timestamp
 from ndn.app import NDNApp
 
-from ndncert.ca.client import Client, Selector, Verifier
+from ndncert.app.client import Client, Selector, Verifier
+from ndncert.proto.ndncert_proto import ChallengeRequest
 from ndncert.proto.types import *
 from .lvs_template import define_minimal_trust_zone
 
@@ -40,78 +45,147 @@ class NoSigningKey(Exception):
     Raised when no appropriate signing key is available
     """
     pass
+class TibError(Exception):
+    """
+    Raised when not calling TIB functions properly
+    """
+    pass
 
 class Tib(object):
     # this will load the app with data_validator
-    def __init__(self, app: NDNApp, bundle: TibBundle, path: Optional[str]):
+    def __init__(self, app: NDNApp, path: str, **kwargs):
+        # loading the accepted signed bundle
+        filename = os.path.join(path, 'trust-zone.bundle')
+        self.base_dir = path
+        bundle_str = ''
+        with open(filename, 'r') as bundle_file:
+            for line in bundle_file.readlines():
+                bundle_str += line
+        
+        # verify signature again to prevent manupulation
+        signed_bundle_wire = b64decode(bundle_str)
+        result, bundle = Tib.accept_signed_bundle(signed_bundle_wire)
+        if not result:
+            logging.fatal(f'Signed Bundle cannot be verified, quit')
+            return
         self.anchor = bundle.anchor
+
         self.anchor_data = parse_certificate(self.anchor)
+        anchor_name = self.anchor_data.name
+        self.zone_prefix = anchor_name[:-4]
         self.schema = bundle.schema
         self.checker = Checker(bundle.schema, DEFAULT_USER_FNS)
-
-        # initialize pib and tpm
-        self._backend_init(path)
+        logging.info(f'Initializing TIB for {Name.to_str(self.zone_prefix)}...')
+        logging.info(f'Trust Anchor: {Name.to_str(anchor_name)}...')
+         
+        # Tib path will be used for pib, tpm
+        if 'keychain' in kwargs:
+            logging.warning(f"Using application's own keychain")
+            keychain = kwargs['keychain']
+            if type(keychain) is KeychainSqlite3:
+                self.keychain = keychain
+            else:
+                raise TibError('Keychain must be KeychainSqlite3 type')
+        else:
+            # initialize pib and tpm
+            if not os.path.exists(self.base_dir):
+                os.makedirs(self.base_dir)
+            tpm_path = os.path.join(self.base_dir, 'privKeys')
+            pib_path = os.path.join(self.base_dir, 'pib.db')
+            if KeychainSqlite3.initialize(pib_path, 'tpm-file', tpm_path):
+                logging.info(f'Intializing keychain at {self.base_dir}...')
+            else:
+                logging.info(f'Found keychain at {self.base_dir}...')
+            self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
 
         # pass keychain to apps      
         self.app = app
         app.keychain = self.keychain
         validator = lvs_validator(self.checker, self.app, self.anchor)
         app.data_validator = validator
-    
-    def _backend_init(self, path: str):
-        if path is None:
-            anchor_name = self.anchor_data.name
-            # /<prefix>/KEY/<keyid>/<issuer>/<version>
-            anchor_prefix = anchor_name[:-4]
-            dir_str = '~/.ndn/tib/' + Name.to_bytes(anchor_prefix).hex()
-            self.basedir = os.path.expanduser(dir_str)
-        else:
-            self.basedir = os.path.expanduser(path)
-        
-        if not os.path.exists(self.basedir):
-            os.makedirs(self.basedir)
-        tpm_path = os.path.join(self.basedir, 'privKeys')
-        pib_path = os.path.join(self.basedir, 'pib.db')
-        self.keychain = KeychainSqlite3(pib_path, TpmFile(tpm_path))
 
-    async def bootstrap(self, id_name: FormalName, selector: Selector, verifier: Verifier):
+    def get_path(self):
+        return self.base_dir
+    
+    # this function will only creates the directory, not initializing the keychain
+    @staticmethod
+    def initialize(signed_bundle: bytes, path = None) -> Tuple[bool, str]:
+        result, bundle = Tib.accept_signed_bundle(signed_bundle)
+        if not result:
+            logging.fatal(f'Signed Bundle cannot be verified, quit')
+            return
+
+        anchor_data = parse_certificate(bundle.anchor)
+        anchor_name = anchor_data.name
+        zone_prefix = anchor_name[:-4]
+        if not path:
+            path = '~/.ndn/tib/' + Name.to_bytes(zone_prefix).hex()
+            path = os.path.expanduser(path)
+        if os.path.exists(path):
+            logging.fatal(f'Tib {path} already exists')
+            return False, path
+        else:
+            os.makedirs(path)
+            
+        # saving the bundle
+        filename = os.path.join(path, 'trust-zone.bundle')
+        max_width = 70
+        with open(filename, 'w') as bundle_file:
+            bundle_str = b64encode(signed_bundle).decode("utf-8")
+            for i in range(0, ceil(len(bundle_str) / max_width)):
+                line = bundle_str[i * max_width : (i + 1) * max_width] + '\n'
+                bundle_file.write(line)
+        return True, path
+
+    @staticmethod
+    def accept_signed_bundle(wire: bytes) -> Tuple[bool, TibBundle]:
+        _, _, content, sig_ptrs = parse_data(wire)
+        bundle = TibBundle.parse(content)
+        anchor_cert_data = parse_certificate(bundle.anchor)
+        pubkey = ECC.import_key(anchor_cert_data.content)
+        return verify_ecdsa(pubkey, sig_ptrs), bundle
+    
+    async def bootstrap(self, id_name: FormalName, selector: Selector, verifier: Verifier,
+                        need_tmpcert = False, need_issuer = False):
         client = Client(self.app)
         
         anchor_name = self.anchor_data.name
         # /<prefix>/KEY/<keyid>/<issuer>/<version>
-        auth_prefix = anchor_name[:-4]
+        zone_prefix = anchor_name[:-4]
         
-        if not Name.is_prefix(auth_prefix, id_name):
-            raise InvalidName
+        if not Name.is_prefix(zone_prefix, id_name):
+            raise InvalidName(f'Authenticator prefix {Name.to_str(zone_prefix)} is not a ' + 
+                              f'prefix of identity name {Name.to_str(id_name)}')
 
         # the name used for authentication
-        id_authname = []
-        id_authname[:] = id_name[:]
-        id_authname.insert(len(auth_prefix), 'auth')
-        
-        authid = self.keychain.touch_identity(id_authname)
-        authid_key = authid.default_key()
-        authid_cert_data = parse_certificate(authid_key.default_cert().data)
-        authid_signer = self.keychain.get_signer({'cert': authid_cert_data.name})
-        _, csr = sign_req(authid_key.name, authid_cert_data.content, authid_signer)
-        issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
-            authid_signer, selector, verifier)
-        
-        logging.debug(f'Retrieving certificate {Name.to_str(issued_cert_name)}...')
-        data_name, _, _, raw_pkt = await self.app.express_interest(
-            issued_cert_name, forwarding_hint=[forwarding_hint], 
-            can_be_prefix=False, lifetime=6000, need_raw_packet=True
-        )
-        try:
-            retrieved_cert = parse_certificate(raw_pkt)
-            logging.info(f'Installing tmp certificate: {Name.to_str(retrieved_cert.name)}')
-        except:
-            logging.error(f'Not a certificate: {Name.to_str(data_name)}')
-            return
-        # installing the tmp cert 
-        self.keychain.import_cert(authid_key.name, issued_cert_name, raw_pkt)
-        
-        # todo: applying acutal cert from the real ndncert
+        if need_tmpcert:
+            id_authname = []
+            id_authname[:] = id_name[:]
+            id_authname.insert(len(zone_prefix), 'auth')
+            
+            authid = self.keychain.touch_identity(id_authname)
+            authid_key = authid.default_key()
+            authid_cert_data = parse_certificate(authid_key.default_cert().data)
+            authid_signer = self.keychain.get_signer({'cert': authid_cert_data.name})
+            _, csr = sign_req(authid_key.name, authid_cert_data.content, authid_signer)
+            auth_prefix = [zone_prefix, Component.from_str('auth')]
+            issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
+                authid_signer, selector, verifier)
+            
+            logging.debug(f'Retrieving certificate {Name.to_str(issued_cert_name)}...')
+            data_name, _, _, raw_pkt = await self.app.express_interest(
+                issued_cert_name, forwarding_hint=[forwarding_hint], 
+                can_be_prefix=False, lifetime=6000, need_raw_packet=True
+            )
+            try:
+                retrieved_cert = parse_certificate(raw_pkt)
+                logging.info(f'Installing tmp certificate: {Name.to_str(retrieved_cert.name)}')
+            except:
+                logging.error(f'Not a certificate: {Name.to_str(data_name)}')
+                return
+            # installing the tmp cert 
+            self.keychain.import_cert(authid_key.name, issued_cert_name, raw_pkt)
+
         # always select proof-of-possession challenge from NDNCERT
         async def _select_possession(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:    
             for challenge in list:
@@ -130,16 +204,29 @@ class Tib(object):
             
             wire = bytearray(70)
             assert authid_signer.write_signature_value(wire, [memoryview(param_value)]) == len(wire)        
-            return 'proof'.encode(), bytes(wire)   
+            return 'proof'.encode(), bytes(wire)
+        
+        if need_issuer:
+            issuer_prefix = [zone_prefix, Component.from_str('cert')]
+        else:
+            issuer_prefix = zone_prefix
         
         formal_id = self.keychain.touch_identity(id_name)
         formal_key = formal_id.default_key()
         formal_cert_data = parse_certificate(formal_key.default_cert().data)
         formal_signer = self.keychain.get_signer({'cert': formal_cert_data.name})
         _, csr = sign_req(formal_key.name, formal_cert_data.content, formal_signer)
-        issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
-            formal_signer, _select_possession, _verify_possession)
-                 
+        
+        if need_issuer:
+            _selector = _select_possession
+            _verifier = _verify_possession
+        else:
+            _selector = selector
+            _verifier = verifier
+
+        issued_cert_name, forwarding_hint = await client.request_signing(issuer_prefix, bytes(csr), 
+            formal_signer, _selector, _verifier)
+            
         logging.debug(f'Retrieving certificate {Name.to_str(issued_cert_name)}...')
         data_name, _, _, raw_pkt = await self.app.express_interest(
             issued_cert_name, forwarding_hint=[forwarding_hint], 
@@ -155,32 +242,47 @@ class Tib(object):
 
         # installing the formal cert
         self.keychain.import_cert(formal_key.name, issued_cert_name, raw_pkt)
-        
-    async def construct_minimal_trust_zone(self, id_name: FormalName, **kwargs):
+
+    # it will modify keychains
+    @staticmethod
+    def construct_minimal_trust_zone(id_name: FormalName, keychain: KeychainSqlite3, need_tmpcert = False, need_issuer = False):
         try:
-            local_anchor_id = self.keychain[id_name]
+            local_anchor_id = keychain[id_name]
         except:
-            local_anchor_id = self.keychain.touch_identity(id_name)
+            local_anchor_id = keychain.touch_identity(id_name)
         local_anchor_key = local_anchor_id.default_key()
         
-        need_tmpcert = False
-        if 'need_tmpcert' in kwargs:
-            need_tmpcert = kwargs['need_tmpcert']
-        local_lvs = define_minimal_trust_zone(local_anchor_id.name, need_tmpcert=need_tmpcert)
+        local_lvs = define_minimal_trust_zone(local_anchor_id.name, 
+            need_tmpcert=need_tmpcert, need_issuer=need_issuer)
+        logging.info(f'Generated LVS: {local_lvs}')   
         # generate TIB bundle
         bundle = TibBundle()
         bundle.anchor = local_anchor_key.default_cert().data
         bundle.schema = compile_lvs(local_lvs)
-        return bundle
+        
+        # sign the bundle
+        trust_anchor_data = parse_certificate(bundle.anchor)
+        bundle_name = []
+        # copy till to the keyid
+        bundle_name[:] = trust_anchor_data.name[:-2]
+        # replace KEY => BUNDLE
+        bundle_name[-2] = Component.from_str('BUNDLE')
+        # append version
+        bundle_name.append(Component.from_version(timestamp()))
+        bundle_signer = keychain.get_signer({'cert': trust_anchor_data.name})
+        # bundle's freshness period should relatively long so can stay in the content store
+        meta_info = MetaInfo.from_dict({'freshness_period': 10000})
+        return make_data(bundle_name, meta_info, bundle.encode(), signer=bundle_signer)
     
-    def sign_data(self, name: NonStrictName, content: bytes):
-        # locate the matching signing certificate
+    def sign_data(self, name: NonStrictName, content: bytes, **kwargs):
+        # locate the matching signing certificate  
         signer_name = self.checker.suggest(name, self.keychain)
         if signer_name is None:
             raise NoSigningKey
-        signer = self.keychain.get_signer({'cert', signer_name})
+        logging.info(f'Signing data {Name.to_str(name)} using {Name.to_str(signer_name)}...') 
+        signer = self.keychain.get_signer({'cert': signer_name})
         # use the suggested key to sign
-        return self.app.prepare_data(name, content = content, signer = signer)
+        return self.app.prepare_data(name, content = content, signer = signer, **kwargs)
         
     def sign_bundle_data(self, bundle_wire: bytes):
         # parsing to obtain the zone prefix
@@ -194,6 +296,5 @@ class Tib(object):
         # append version
         bundle_name.append(Component.from_version(timestamp()))
         
-        # /<prefix>/BUNDLE/<keyid>/<version>
         logging.debug(f'Generating bundle {Name.to_str(bundle_name)}...')        
         return self.sign_data(bundle_name, bundle_wire)

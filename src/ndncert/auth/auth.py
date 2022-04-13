@@ -14,17 +14,11 @@ from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DE
 from datetime import datetime
 
 class Authenticator(object):
-    def __init__(self, app: NDNApp, config: Dict, auth_mean: str):
+    def __init__(self, app: NDNApp, config: Dict, auth_mean: str, db_dir: str):
         self.config = config
         self.auth_mean = auth_mean
         self.app = app
-        self.db_dir = self.config['tib_config']['base_dir']
-        
-        basedir = self.config['tib_config']['base_dir']
-        import os
-        basedir = os.path.expanduser(basedir)
-        # it should be there, if not, we have an problem
-        self.db_dir = os.path.join(basedir, 'ndncert-ca')
+        self.db_dir = db_dir
         
     @abstractmethod
     async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:

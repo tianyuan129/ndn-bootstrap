@@ -8,7 +8,7 @@ import os
 # from app_support.tib import Tib, TibBundle
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.app_support.light_versec import compile_lvs
-from ndncert.ca.ca import Ca
+from ndncert.app.ca import Ca
 from ndncert.app_support.tib import Tib, TibBundle
 
 app = NDNApp()

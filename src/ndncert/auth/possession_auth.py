@@ -20,13 +20,13 @@ from Cryptodome.Signature import DSS
 from .auth import Authenticator
 
 class PossessionAuthenticator(Authenticator):
-    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict):
+    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict, db_dir: str):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
         self.storage = requests_storage
         self.ca_name = self.ca_cert_data.name[:-4]
         self.config = config
-        Authenticator.__init__(self, app, self.config, 'possession')
+        Authenticator.__init__(self, app, self.config, 'possession', db_dir)
     
     @staticmethod
     def _verify_raw_ecdsa(pubkey, nonce, proof) -> bool:
