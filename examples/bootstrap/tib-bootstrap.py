@@ -52,7 +52,8 @@ def main() -> int:
         # TIB will create keychain on application's behalf and load to app
         tib = Tib(app, path=tib_base)
         async def bootstrap():
-            await tib.bootstrap(Name.from_str('/ndn/local/ucla/tianyuan'), select_first, email_verifier)
+            await tib.bootstrap(Name.from_str('/ndn/local/ucla/tianyuan'), select_first, email_verifier,
+                                need_tmpcert=True, need_issuer=True)
             app.shutdown()
 
         app.run_forever(bootstrap())

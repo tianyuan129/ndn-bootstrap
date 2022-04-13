@@ -168,7 +168,8 @@ class Tib(object):
             authid_cert_data = parse_certificate(authid_key.default_cert().data)
             authid_signer = self.keychain.get_signer({'cert': authid_cert_data.name})
             _, csr = sign_req(authid_key.name, authid_cert_data.content, authid_signer)
-            auth_prefix = [zone_prefix, Component.from_str('auth')]
+
+            auth_prefix = zone_prefix + [Component.from_str('auth')]
             issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
                 authid_signer, selector, verifier)
             
@@ -207,7 +208,7 @@ class Tib(object):
             return 'proof'.encode(), bytes(wire)
         
         if need_issuer:
-            issuer_prefix = [zone_prefix, Component.from_str('cert')]
+            issuer_prefix = zone_prefix + [Component.from_str('cert')]
         else:
             issuer_prefix = zone_prefix
         
@@ -274,14 +275,16 @@ class Tib(object):
         meta_info = MetaInfo.from_dict({'freshness_period': 10000})
         return make_data(bundle_name, meta_info, bundle.encode(), signer=bundle_signer)
     
-    def sign_data(self, name: NonStrictName, content: bytes, **kwargs):
+    def suggest_signer(self, name: NonStrictName):
         # locate the matching signing certificate  
         signer_name = self.checker.suggest(name, self.keychain)
         if signer_name is None:
             raise NoSigningKey
-        logging.info(f'Signing data {Name.to_str(name)} using {Name.to_str(signer_name)}...') 
-        signer = self.keychain.get_signer({'cert': signer_name})
-        # use the suggested key to sign
+        return self.keychain.get_signer({'cert': signer_name})
+    
+    def sign_data(self, name: NonStrictName, content: bytes, **kwargs):
+        # locate the matching signing certificate
+        signer = self.suggest_signer(name)
         return self.app.prepare_data(name, content = content, signer = signer, **kwargs)
         
     def sign_bundle_data(self, bundle_wire: bytes):

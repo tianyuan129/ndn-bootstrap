@@ -3,11 +3,12 @@ from datetime import datetime
 
 import logging, os
 
-from ndn.encoding import Name, FormalName, Name, parse_data
+from ndn.encoding import Name, Component, parse_data
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.utils import gen_nonce
 from ndn.security.validator.known_key_validator import verify_ecdsa
+from ndncert.app_support.tib import Tib
 from ndncert.proto.ndncert_proto import *
 from ndncert.util.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
@@ -20,11 +21,13 @@ from Cryptodome.Signature import DSS
 from .auth import Authenticator
 
 class PossessionAuthenticator(Authenticator):
-    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict, db_dir: str):
+    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any],
+                 config: Dict, db_dir: str, tib: Tib):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
         self.storage = requests_storage
         self.ca_name = self.ca_cert_data.name[:-4]
+        self.tib = tib
         self.config = config
         Authenticator.__init__(self, app, self.config, 'possession', db_dir)
     
@@ -89,7 +92,12 @@ class PossessionAuthenticator(Authenticator):
                 cert_state.status = STATUS_CHALLENGE
                 csr_data = parse_certificate(cert_state.csr)
 
-                signer = self.keychain.get_signer({'cert': self.ca_cert_data.name})
+                # signer suggester must take a full name as input, so let's mock one
+                mock_name = []
+                mock_name[:] = csr_data.name[:]
+                mock_name[-2] = Component.from_str('ndncert-python') 
+                signer_certname = self.tib.suggest_signer(mock_name)
+                signer = self.keychain.get_signer({'cert': signer_certname})
                 issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
                 cert_state.issued_cert = issued_cert
                 

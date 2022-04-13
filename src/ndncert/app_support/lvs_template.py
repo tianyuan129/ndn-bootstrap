@@ -19,14 +19,17 @@ lvs_template = r'''
 TEMPLATE_KEY = '''
 #KEY: "KEY"/_/_/_version & { _version: $eq_type("v=0") }
 '''
+TEMPLATE_DELEGATEDKEY = '''
+#DELEGATEDKEY: "KEY"/_/"Anchor"/_version & { _version: $eq_type("v=0") }
+'''
 TEMPLATE_ANCHOR_RULE = '''
 #Anchor: {zone_pattern}/#KEY
 '''
 TEMPLATE_TMPCERT_RULE = '''
-#TmpCert: {zone_pattern}{variable_pattern}/#KEY <= #{signer}
+#TmpCert: {zone_pattern}{variable_pattern}/#{key} <= #{signer}
 '''
 TEMPLATE_GENERIC_CERT_RULE = '''
-#{signee}: {zone_pattern}{variable_pattern}/#KEY <= #{signer}
+#{signee}: {zone_pattern}{variable_pattern}/#{key} <= #{signer}
 '''
 TEMPLATE_NDNCERT1_DATA_RULE = '''
 #NewResponse: {zone_pattern}/"CA"/"NEW"/_ <= #Anchor
@@ -89,16 +92,21 @@ def name_to_hardened_pattern(name: FormalName):
 def define_key():
     return TEMPLATE_KEY
 
-def define_tmpcert(zone_name: FormalName, variable_pattern: str, signer = 'Anchor'):
+def define_delagatedkey():
+    return TEMPLATE_DELEGATEDKEY
+
+def define_tmpcert(zone_name: FormalName, variable_pattern: str, key = 'KEY', signer = 'Anchor'):
     _zone_pattern = name_to_hardened_pattern(zone_name)
     return TEMPLATE_TMPCERT_RULE.format(zone_pattern = _zone_pattern,
                                         variable_pattern = variable_pattern,
+                                        key = key,
                                         signer = signer)
 # when defining a cert rule, one must know who is the signer and signee
-def define_generic_cert(zone_name: FormalName, variable_pattern: str, signee: str, signer: str):
+def define_generic_cert(zone_name: FormalName, variable_pattern: str, signee: str, signer: str, key = 'KEY'):
     _zone_pattern = name_to_hardened_pattern(zone_name)
     return TEMPLATE_GENERIC_CERT_RULE.format(zone_pattern = _zone_pattern,
                                         variable_pattern = variable_pattern,
+                                        key = key,
                                         signee = signee,
                                         signer = signer)
 
@@ -120,10 +128,8 @@ def define_ndncert_proto(zone_name: FormalName, **kwargs):
         _index = kwargs['index']
     else:
         _index = 0
-    # ret_lvs = TEMPLATE_NDNCERT_DATA_RULE.format(index = _index)
     
     _zone_pattern = name_to_hardened_pattern(zone_name)
-    # ret_lvs = ret_lvs.format(zone_pattern = _zone_pattern)
     
     # format issuer varname
     _issuer_varname = ''
@@ -135,7 +141,6 @@ def define_ndncert_proto(zone_name: FormalName, **kwargs):
             harden = kwargs['harden']
             if harden:
                 _issuer_varpattern = name_to_hardened_pattern(_issuer_varname)
-    # ret_lvs = ret_lvs.format(variable_pattern = _issuer_varpattern)
     
     # format issuer id
     if 'issuer_id' in kwargs:
@@ -143,7 +148,6 @@ def define_ndncert_proto(zone_name: FormalName, **kwargs):
         _issuer_id.capitalize()
     else:
         _issuer_id = 'Anchor'
-    # ret_lvs = ret_lvs.format(issuer = _issuer_id)    
     return TEMPLATE_NDNCERT_DATA_RULE.format(index = _index, zone_pattern = _zone_pattern,
                                              variable_pattern = _issuer_varpattern,
                                              issuer = _issuer_id)
@@ -186,6 +190,7 @@ def define_generic_data_rule(rule: str, zone_name: FormalName, **kwargs):
 def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_issuer = False):
     lvs = ''
     lvs += define_key()
+    lvs += define_delagatedkey()
     # only allow 1 length suffix
     lvs += define_anchor(zone_name)
     
@@ -194,7 +199,8 @@ def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_
     if need_issuer:
         cert_issuer = 'Issuer'
         # derive the issuer from anchor
-        lvs += define_generic_cert(zone_name, '/"cert"', 'Issuer', 'Anchor')
+        lvs += define_generic_cert(zone_name, '/"cert"', signee = 'Issuer', signer = 'Anchor',
+                                   key = 'DELEGATEDKEY')
         # define the second ndncert for cert issuer
         lvs += define_ndncert_proto(zone_name, issuer_var = Name.from_str('/cert'),
             index = index, issuer_id = 'Issuer', harden = True)
@@ -203,11 +209,12 @@ def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_
         cert_issuer = 'Anchor'
 
     if need_tmpcert:
-        lvs += define_tmpcert(zone_name, '/"auth"/_', 'Auth')
+        lvs += define_tmpcert(zone_name, '/"auth"/_', signer = 'Auth')
         # derive the authenticator from anchor
-        lvs += define_generic_cert(zone_name, '/"auth"', 'Auth', 'Anchor')
+        lvs += define_generic_cert(zone_name, '/"auth"', signee ='Auth', signer = 'Anchor',
+                                   key = 'DELEGATEDKEY')
         lvs += define_ndncert_proto(zone_name, issuer_var = Name.from_str('/auth'), 
-            index = index, issuer_id = 'Anchor', harden = True)
+            index = index, issuer_id = 'Auth', harden = True)
         index += 1
     
     # define ndncert proto for cert issuer
@@ -215,7 +222,7 @@ def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_
     index += 1
     # derive other certs from the cert issuer
     # EntityClassi: i len suffix after @zone_name 
-    lvs += define_generic_cert(zone_name, '/suffix1', 'EntityClass1', cert_issuer)
+    lvs += define_generic_cert(zone_name, '/suffix1', signee = 'EntityClass1', signer = cert_issuer)
     # lvs += define_generic_cert(zone_name, '/_/_', 'EntityClass2', 'Issuer')
 
     # define app data produced by EntityClass

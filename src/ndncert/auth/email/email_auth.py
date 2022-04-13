@@ -4,7 +4,7 @@ from datetime import datetime
 import logging, os
 from random import randint
 
-from ndn.encoding import Name, FormalName
+from ndn.encoding import Name, FormalName, Component
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.utils import gen_nonce
@@ -13,17 +13,20 @@ from ndncert.proto.ndncert_proto import *
 from ndncert.util.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
 from ndncert.util.sending_email import *
+from ndncert.app_support.tib import Tib
 
 from ..auth import Authenticator
 
 
 class EmailAuthenticator(Authenticator):
-    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any], config: Dict, db_dir: str):
+    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any],
+                 config: Dict, db_dir: str, tib: Tib):
         self.ca_cert_data = ca_cert_data
         self.keychain = keychain
         self.storage = requests_storage
         self.ca_name = self.ca_cert_data.name[:-4]
         self.config = config
+        self.tib = tib
         self.app = app
         Authenticator.__init__(self, app, config, 'email', db_dir)
         
@@ -72,7 +75,12 @@ class EmailAuthenticator(Authenticator):
                 cert_state.status = STATUS_CHALLENGE
                 csr_data = parse_certificate(cert_state.csr)
 
-                signer = self.keychain.get_signer({'cert': self.ca_cert_data.name})
+                # signer suggester must take a full name as input, so let's mock one
+                mock_name = []
+                mock_name[:] = csr_data.name[:]
+                mock_name[-2] = Component.from_str('ndncert-python') 
+                signer_certname = self.tib.suggest_signer(mock_name)
+                signer = self.keychain.get_signer({'cert': signer_certname})
                 issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
                 cert_state.issued_cert = issued_cert
                 

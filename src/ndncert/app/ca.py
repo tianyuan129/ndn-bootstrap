@@ -169,7 +169,7 @@ class Ca(object):
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do
         actor.__init__(actor, self.app, self.ca_cert_data, self.keychain, 
-            self.requests, self.config, self.db_dir)
+            self.requests, self.config, self.db_dir, self.tib)
         # maybe use asyncio to create task?
         
         response, err = await actor.actions[cert_state.status](actor, request, cert_state)
