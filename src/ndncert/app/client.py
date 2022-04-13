@@ -19,20 +19,17 @@ class Client(object):
         random_part = message_in.iv[:8]
         counter_part = message_in.iv[-4:]
         counter = int.from_bytes(counter_part, 'big')
-        try:
-            assert random_part == self.iv_random_last
-        except AttributeError:
-            self.iv_random_last = random_part
-        except AssertionError:
-            raise ProtoError(f'Random part of AES IV not equal')
-      
-        try:
-            assert counter >= self.counter_last
-        except AttributeError:
-            self.counter_last = counter
-        except AssertionError:
-            raise ProtoError(f'Counter part should be monotonically increasing')
-        
+        if len(self.iv_random_last):
+            if random_part != self.iv_random_last:
+                raise ProtoError(f'Random part of AES IV not equal')
+            else:
+                pass
+        if self.counter_last > 0:
+            if counter < self.counter_last:
+                raise ProtoError(f'Counter part should be monotonically increasing')
+            else:
+                pass
+
         aes_key = ecdh.derived_key
         plaintext = get_encrypted_message(bytes(aes_key), request_id, message_in)
         challenge_response = ChallengeResponse.parse(plaintext)
@@ -69,6 +66,8 @@ class Client(object):
                     selected)
             
         if challenge_response.status == STATUS_SUCCESS:
+            self.iv_random_last = b''
+            self.counter_last
             return challenge_response.issued_cert_name, challenge_response.forwarding_hint
 
     async def request_signing(self, ca_prefix: FormalName, csr: bytes, signer, selector: Selector, verifier: Verifier) -> Tuple[FormalName, FormalName]:
@@ -77,7 +76,9 @@ class Client(object):
         ecdh = ECDH()
         new_request.ecdh_pub = ecdh.pub_key_encoded
         new_request.cert_request = csr
-        
+        self.iv_random_last = b''
+        self.counter_last = 0
+
         interest_name = ca_prefix + Name.from_str('/CA/NEW')
         data_name, _, content = await self.app.express_interest(
             interest_name, app_param = new_request.encode(), must_be_fresh=True, 

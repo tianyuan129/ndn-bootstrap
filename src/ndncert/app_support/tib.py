@@ -13,13 +13,16 @@
 #       3.1. using trust schema to validate the received data/interest packet
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
+from atexit import register
 from typing import Optional, Tuple
 from base64 import b64encode, b64decode
+import asyncio
 from math import ceil
 from Cryptodome.PublicKey import ECC
 import logging, os
 from ndn.encoding import Name, Component, parse_data, make_data,  \
-     NonStrictName, FormalName, TlvModel, BytesField, ModelField,MetaInfo
+     NonStrictName, FormalName, TlvModel, BytesField, ModelField, MetaInfo, \
+     InterestParam, BinaryStr
 from ndn.app_support.security_v2 import parse_certificate, sign_req
 from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, LvsModel, lvs_validator
 from ndn.security import TpmFile, KeychainSqlite3, verify_ecdsa
@@ -102,7 +105,27 @@ class Tib(object):
         self.app = app
         app.keychain = self.keychain
         validator = lvs_validator(self.checker, self.app, self.anchor)
-        app.data_validator = validator
+        
+        # a validator wrapper is needed to attach specific trust schema to trust zone namespace
+        async def _validator_wrapper(name, sig_ptrs):
+            if Name.is_prefix(self.zone_prefix, name):
+                logging.warning(f'Trust Zone data, checking...')
+                return await validator(name, sig_ptrs)
+            elif Name.is_prefix('/localhost', name):
+                logging.warning(f'NFD management data, bypass {Name.to_str(name)}...')
+                return True
+            elif Name.is_prefix('/localhop', name):
+                logging.warning(f'NFD management data, bypass {Name.to_str(name)}...')
+                return True
+            else:
+                logging.fatal(f'Neither schema defined nor NFD management data'
+                                ', default reject')
+                return False
+        app.data_validator = _validator_wrapper
+        
+        # initialzing key handles
+        self._key_handles = []
+        
 
     def get_path(self):
         return self.base_dir
@@ -144,6 +167,29 @@ class Tib(object):
         anchor_cert_data = parse_certificate(bundle.anchor)
         pubkey = ECC.import_key(anchor_cert_data.content)
         return verify_ecdsa(pubkey, sig_ptrs), bundle
+    
+    async def register_keys(self):
+        for id_name in self.keychain:
+            key_prefix = id_name + [Component.from_str('KEY')]
+            
+            if key_prefix not in self._key_handles:
+                logging.debug(f'TIB registers for {Name.to_str(key_prefix)}')
+                @self.app.route(key_prefix, validator=self.app.data_validator)
+                def _on_cert_retrieval(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
+                    for id_name in self.keychain:
+                        identity = self.keychain[id_name]
+                        for key_name in identity:
+                            key = identity[key_name]
+                            for cert_name in key:
+                                logging.debug(f'If {Name.to_str(cert_name)} satisfies the Interest {Name.to_str(name)}')
+                                if Name.is_prefix(name, cert_name) or name == cert_name:
+                                    cert = key[cert_name].data
+                                    logging.debug(f'Returning {Name.to_str(cert_name)}...')
+                                    self.app.put_raw_packet(cert)
+                self._key_handles.append(key_prefix)
+
+        await asyncio.sleep(1)
+        asyncio.create_task(self.register_keys())
     
     async def bootstrap(self, id_name: FormalName, selector: Selector, verifier: Verifier,
                         need_tmpcert = False, need_issuer = False):

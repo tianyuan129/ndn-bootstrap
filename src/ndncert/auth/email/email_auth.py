@@ -79,8 +79,7 @@ class EmailAuthenticator(Authenticator):
                 mock_name = []
                 mock_name[:] = csr_data.name[:]
                 mock_name[-2] = Component.from_str('ndncert-python') 
-                signer_certname = self.tib.suggest_signer(mock_name)
-                signer = self.keychain.get_signer({'cert': signer_certname})
+                signer = self.tib.suggest_signer(mock_name)
                 issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
                 cert_state.issued_cert = issued_cert
                 

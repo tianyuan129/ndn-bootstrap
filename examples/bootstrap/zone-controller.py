@@ -3,7 +3,7 @@ from base64 import b64encode
 from math import ceil
 from datetime import datetime
 
-import logging, os
+import logging, os, asyncio
 from ndn.encoding import Name, Component
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.app import NDNApp
@@ -15,7 +15,7 @@ from ndncert.util.config import get_yaml
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
-                    level=logging.INFO,
+                    level=logging.DEBUG,
                     style='{')
 
 app = NDNApp()
@@ -28,7 +28,7 @@ def save_bundle(file, filepath):
             line = bundle_str[i * max_width : (i + 1) * max_width] + '\n'
             bundle_file.write(line)    
 
-def main(tmpdirname) -> int:
+async def async_main(tmpdirname):
     pib_file = os.path.join(tmpdirname, 'pib.db')
     tpm_dir = os.path.join(tmpdirname, 'privKeys')
     KeychainSqlite3.initialize(pib_file, 'tpm-file', tpm_dir)
@@ -46,6 +46,7 @@ def main(tmpdirname) -> int:
     tib_base = os.path.join(tmpdirname, 'tib-test')
     Tib.initialize(signed_bundle, tib_base)
     tib = Tib(app, tib_base, keychain = keychain)
+    await tib.register_keys()
     
     # also write to the local dir to enable out-of-band sharing
     dirname = os.path.dirname(__file__)
@@ -99,4 +100,4 @@ def main(tmpdirname) -> int:
 
 if __name__ == "__main__":
     with TemporaryDirectory() as tmpdirname:
-        app.run_forever(after_start=main(tmpdirname))
+        app.run_forever(after_start=async_main(tmpdirname))
