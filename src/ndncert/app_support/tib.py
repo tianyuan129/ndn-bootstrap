@@ -13,7 +13,6 @@
 #       3.1. using trust schema to validate the received data/interest packet
 #     4. (Extra) Starting a new trust zone
 #       4.1. configuring necessary pieces to become a trust zone controller
-from atexit import register
 from typing import Optional, Tuple
 from base64 import b64encode, b64decode
 import asyncio
@@ -109,18 +108,17 @@ class Tib(object):
         # a validator wrapper is needed to attach specific trust schema to trust zone namespace
         async def _validator_wrapper(name, sig_ptrs):
             if Name.is_prefix(self.zone_prefix, name):
-                logging.warning(f'Trust Zone data, checking...')
+                logging.debug(f'Trust Zone data, checking...')
                 return await validator(name, sig_ptrs)
             elif Name.is_prefix('/localhost', name):
-                logging.warning(f'NFD management data, bypass {Name.to_str(name)}...')
+                logging.debug(f'NFD management data, bypass {Name.to_str(name)}...')
                 return True
             elif Name.is_prefix('/localhop', name):
-                logging.warning(f'NFD management data, bypass {Name.to_str(name)}...')
+                logging.debug(f'NFD management data, bypass {Name.to_str(name)}...')
                 return True
             else:
-                logging.fatal(f'Neither schema defined nor NFD management data'
-                                ', default reject')
-                return False
+                logging.debug(f'Neither schema defined nor NFD management data')
+                return True
         app.data_validator = _validator_wrapper
         
         # initialzing key handles
@@ -188,7 +186,7 @@ class Tib(object):
                                     self.app.put_raw_packet(cert)
                 self._key_handles.append(key_prefix)
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
         asyncio.create_task(self.register_keys())
     
     async def bootstrap(self, id_name: FormalName, selector: Selector, verifier: Verifier,

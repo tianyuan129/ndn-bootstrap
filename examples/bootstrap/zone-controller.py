@@ -2,7 +2,7 @@ from tempfile import TemporaryDirectory
 from datetime import datetime
 
 import logging, os, asyncio
-from ndn.encoding import Name, Component
+from ndn.encoding import Name, parse_data
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
@@ -10,6 +10,7 @@ from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndncert.app_support.tib import Tib
 from ndncert.app.ca import Ca
 from ndncert.utils.config import get_yaml
+from ndncert.utils.rdr import RdrProducer
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
@@ -110,6 +111,12 @@ async def async_main(tmpdirname):
     ca_issuer = Ca(app, config, tib)
     ca_issuer.go()
 
+    # host bundle
+    rdr_pro = RdrProducer(app, Name.from_str('/ndn/local/ucla/BUNDLE'),
+                          tib, register_route = True)
+    _, _, content, _ = parse_data(signed_bundle)
+    rdr_pro.produce(content)
+    
 if __name__ == "__main__":
     with TemporaryDirectory() as tmpdirname:
         app.run_forever(after_start=async_main(tmpdirname))

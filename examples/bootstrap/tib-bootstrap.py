@@ -3,18 +3,11 @@ from typing import Tuple, List
 from tempfile import TemporaryDirectory
 
 import logging, os
-from ndn.encoding import Name, parse_data
-from ndn.security import KeychainSqlite3, TpmFile
+from ndn.encoding import Name
 from ndn.app import NDNApp
-from ndn.app_support.security_v2 import sign_req, parse_certificate
-from ndn.app_support.light_versec import compile_lvs
-from ndn.security.validator import verify_ecdsa
 
-from ndncert.app_support.tib import Tib, TibBundle
-
-from Cryptodome.Hash import SHA256
-from Cryptodome.PublicKey import ECC
-from Cryptodome.Signature import DSS
+from ndncert.app_support.tib import Tib
+from ndncert.utils.rdr import RdrConsumer
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
@@ -54,8 +47,11 @@ def main() -> int:
         async def bootstrap():
             await tib.bootstrap(Name.from_str('/ndn/local/ucla/tianyuan'), select_first, email_verifier,
                                 need_tmpcert=True, need_issuer=True)
+            rdr_con = RdrConsumer(app, Name.from_str('/ndn/local/ucla/BUNDLE'))
+            name, meta, content = await rdr_con.consume()
+            logging.info(f'{Name.to_str(name)}')
+            
             app.shutdown()
-
         app.run_forever(bootstrap())
     
     

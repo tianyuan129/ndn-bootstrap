@@ -240,5 +240,18 @@ def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_
         variable_pattern = '/"BUNDLE"/_keyid/_version',
         constraints = constraints,
         signer = 'Anchor')
+
+    lvs += define_generic_data_rule('Bundle0', zone_name,
+        # allow entity class publish data at one level deeper
+        variable_pattern = '/"BUNDLE"/_version',
+        constraints = constraints,
+        signer = 'Anchor')
+    
+    # rdr
+    lvs += define_generic_data_rule('Bundle0Rdr', zone_name,
+        # allow entity class publish data at one level deeper
+        variable_pattern = '/"BUNDLE"/"32=metadata"/_version/_',
+        constraints = constraints,
+        signer = 'Anchor')
     # a little formatting
     return lvs.replace('\n\n', '\n')
