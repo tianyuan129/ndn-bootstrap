@@ -118,7 +118,3 @@ checkpoint
 
 # pytest
 .pytest_cache
-
-# Special
-# Requirements should be specified by setup.py
-main.py

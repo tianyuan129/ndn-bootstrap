@@ -1,9 +1,7 @@
-from functools import cache
-from re import X
 from typing import Optional, Dict
 import plyvel
 
-import logging, os, sys
+import logging, sys
 from os import urandom
 import asyncio
 from datetime import datetime
@@ -11,7 +9,6 @@ from datetime import datetime
 from ndn.app import NDNApp
 from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
 from ndn.app_support.security_v2 import parse_certificate
-from ndn.security import KeychainSqlite3, TpmFile
 from ndn.utils import gen_nonce
 
 from ndncert.app_support.tib import Tib
@@ -50,20 +47,6 @@ class Ca(object):
         self.db_init(self.tib.get_path())
         self.app = app
         app.keychain = self.keychain
-
-    # def save_db(self):
-    #     """
-    #     Save the state into the database.
-    #     """
-    #     logging.debug('Save state to DB')
-    #     if self.db:
-    #         wb = self.db.write_batch()
-    #         wb.put(b'approved_requests', self.approved_requests.encode())
-    #         wb.put(b'rejected_requests', self.rejected_requests.encode())
-    #         wb.put(b'pending_requests', self.pending_requests.encode())
-    #         wb.put(b'rejected_bindings', self.rejected_bindings.encode())
-    #         wb.write()
-    #         self.db.close()
 
     def db_init(self, basedir):
         logging.info("Server starts its initialization")
@@ -270,6 +253,8 @@ class Ca(object):
         await asyncio.sleep(5)
         self.app.unset_interest_filter(name)
         logging.info(f'Unregister the interest filter for {Name.to_str(name)}...')
+        logging.debug(f'Clear the cache...')
+        self.cache.pop(Name.to_bytes(name))
 
     def go(self):
         self.app.route(self.ca_prefix + '/CA')(None)

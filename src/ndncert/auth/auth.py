@@ -6,10 +6,10 @@ from ndncert.proto.ndncert_proto import *
 from ndncert.proto.ca_storage import *
 from ndncert.util.sending_email import *
 
-from ndn.encoding import Name, FormalName
+from ndn.encoding import Name
 from ndn.app import NDNApp
-from ndn.app_support.security_v2 import parse_certificate, derive_cert
-from ndn.app_support.light_versec import compile_lvs, Checker, SemanticError, DEFAULT_USER_FNS
+from ndn.app_support.security_v2 import parse_certificate
+from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS
 
 from datetime import datetime
 

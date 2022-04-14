@@ -1,7 +1,7 @@
 from typing import Tuple
 import logging
 
-from ndn.app import NDNApp, InterestNack, InterestTimeout, InterestCanceled, ValidationFailure
+from ndn.app import NDNApp
 from ndn.encoding import Name, Component, FormalName, tlv_model
 
 from ndncert.proto.ndncert_proto import *
@@ -44,7 +44,8 @@ class Client(object):
             challenge_request.selected_challenge = selected
             
             # encrypt the message
-            message_out, _, iv_counter = gen_encrypted_message(bytes(aes_key), request_id, challenge_request.encode(),
+            message_out, _, iv_counter = gen_encrypted_message(bytes(aes_key), request_id,
+                                                               challenge_request.encode(),
                 bytes(self.iv_random), iv_counter)
             interest_name = ca_prefix + Name.from_str('/CA/CHALLENGE')
             interest_name = interest_name + [Component.from_bytes(request_id)]
@@ -70,7 +71,8 @@ class Client(object):
             self.counter_last
             return challenge_response.issued_cert_name, challenge_response.forwarding_hint
 
-    async def request_signing(self, ca_prefix: FormalName, csr: bytes, signer, selector: Selector, verifier: Verifier) -> Tuple[FormalName, FormalName]:
+    async def request_signing(self, ca_prefix: FormalName, csr: bytes, signer,
+                              selector: Selector, verifier: Verifier) -> Tuple[FormalName, FormalName]:
         # NEW
         new_request = NewRequest()
         ecdh = ECDH()
@@ -109,8 +111,9 @@ class Client(object):
         challenge_request.parameter_value = param_value
         
         # encrypt the message
-        message_out, self.iv_random, iv_counter = gen_encrypted_message(bytes(aes_key), request_id, 
-            challenge_request.encode(), None, None)
+        message_out, self.iv_random, iv_counter =\
+            gen_encrypted_message(bytes(aes_key), request_id, challenge_request.encode(),
+                                  None, None)
 
         # express the interest
         interest_name = ca_prefix + Name.from_str('/CA/CHALLENGE')

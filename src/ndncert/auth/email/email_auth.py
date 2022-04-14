@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 from datetime import datetime
 
 import logging, os
@@ -7,7 +7,6 @@ from random import randint
 from ndn.encoding import Name, FormalName, Component
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
-from ndn.utils import gen_nonce
 
 from ndncert.proto.ndncert_proto import *
 from ndncert.util.ndncert_crypto import *
