@@ -168,9 +168,7 @@ class Ca(object):
         # cast the corresponding challenge actor
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do
-        actor.__init__(actor, self.app, self.ca_cert_data, self.keychain, 
-            self.requests, self.config, self.db_dir, self.tib)
-        # maybe use asyncio to create task?
+        actor.__init__(actor, self.app, self.requests, self.config, self.db_dir, self.tib)
         
         response, err = await actor.actions[cert_state.status](actor, request, cert_state)
 
@@ -180,9 +178,6 @@ class Ca(object):
         
         if response is not None:            
             plaintext = response.encode()
-            # message_out, iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), cert_state.iv_counter, 
-            #                                                 bytes(cert_state.id), plaintext)
-            
             # todo: iv handlings should tolerate concurrent requests
             try: 
                 iv_random = self.iv_random
@@ -193,7 +188,8 @@ class Ca(object):
             except AttributeError:
                 self.iv_counter = None
 
-            message_out, self.iv_random, self.iv_counter = gen_encrypted_message(bytes(cert_state.aes_key), bytes(cert_state.id), 
+            message_out, self.iv_random, self.iv_counter =\
+                gen_encrypted_message(bytes(cert_state.aes_key), bytes(cert_state.id), 
                 plaintext, self.iv_random, self.iv_counter)
 
             cert_state.iv_counter = self.iv_counter
@@ -205,7 +201,8 @@ class Ca(object):
                 self.cache[Name.to_bytes(issued_cert.name)] = cert_state.issued_cert
                 
                 # create an window for cert retrieval
-                logging.debug(f'Register a short-lived interest filter to allow retrieve {Name.to_str(issued_cert.name)}...')
+                logging.debug(f'Register a short-lived interest filter to allow retrieve '
+                              f'{Name.to_str(issued_cert.name)}...')
                 asyncio.ensure_future(self.serve_cert(issued_cert.name))
 
             # success, put into the approved list

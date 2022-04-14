@@ -21,11 +21,13 @@ class Authenticator(object):
         self.db_dir = db_dir
         
     @abstractmethod
-    async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState)\
+        -> Tuple[ChallengeResponse, ErrorMessage]:
         pass
 
     @abstractmethod
-    async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState)\
+        -> Tuple[ChallengeResponse, ErrorMessage]:
         pass
 
     def autopass(self, cert_state: CertState) -> bool:
@@ -58,8 +60,8 @@ class Authenticator(object):
         if db_result:
             approved_bindings = IdentityBindingList.parse(db_result)
             approved_bindings.bindings = [binding for binding in approved_bindings.bindings
-                                            if binding.timestamp and
-                                               binding.timestamp > int(datetime.utcnow().timestamp())]
+                                          if binding.timestamp and
+                                             binding.timestamp > int(datetime.utcnow().timestamp())]
             db.put(b'approved_bindings', approved_bindings.encode())                       
         db.close()
 

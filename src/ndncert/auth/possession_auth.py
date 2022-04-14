@@ -21,12 +21,11 @@ from Cryptodome.Signature import DSS
 from .auth import Authenticator
 
 class PossessionAuthenticator(Authenticator):
-    def __init__(self, app: NDNApp, ca_cert_data, keychain, requests_storage: Dict[bytes, Any],
+    def __init__(self, app: NDNApp, cache: Dict[bytes, Any],
                  config: Dict, db_dir: str, tib: Tib):
-        self.ca_cert_data = ca_cert_data
-        self.keychain = keychain
-        self.storage = requests_storage
-        self.ca_name = self.ca_cert_data.name[:-4]
+        self.cache = cache
+        ca_name_str = config['prefix_config']['prefix_name'] + '/CA'
+        self.ca_name = Name.from_str(ca_name_str)
         self.tib = tib
         self.config = config
         Authenticator.__init__(self, app, self.config, 'possession', db_dir)
@@ -42,7 +41,8 @@ class PossessionAuthenticator(Authenticator):
         except ValueError:
             return False
 
-    async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState)\
+        -> Tuple[ChallengeResponse, ErrorMessage]:
         cert_state.auth_mean = request.selected_challenge
         cert_state.iden_key = request.parameter_key
         cert_state.iden_value = request.parameter_value
@@ -54,13 +54,15 @@ class PossessionAuthenticator(Authenticator):
 
         # obtain public key
         signing_cert = sig_ptrs.signature_info.key_locator.name
-        logging.info(f'Verifying credential: {Name.to_str(credential_name)} <= {Name.to_str(signing_cert)} ...')
+        logging.info(f'Verifying credential: {Name.to_str(credential_name)} '
+                     f'<= {Name.to_str(signing_cert)} ...')
         valid = await self.app.data_validator(credential_name, sig_ptrs)
         if not valid:
             errs = ErrorMessage()
             errs.code = ERROR_NAME_NOT_ALLOWED[0]
             errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
-            logging.info(f'Credential {Name.to_str(credential_name)} is not allowed in trust model')
+            logging.info(f'Credential {Name.to_str(credential_name)} '
+                         'is not allowed in trust model')
             return None, errs
         else:
             secret = os.urandom(16)
@@ -77,10 +79,11 @@ class PossessionAuthenticator(Authenticator):
             cert_state.auth_key = CHALLENGE_POSS_PARAMETER_KEY_NONCE.encode()
             cert_state.auth_value = secret
             cert_state.status = STATUS_CHALLENGE
-            self.storage[cert_state.id] = cert_state
+            self.cache[cert_state.id] = cert_state
             return response, None
 
-    async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState) -> Tuple[ChallengeResponse, ErrorMessage]:
+    async def actions_continue_challenge(self, request: ChallengeRequest, cert_state: CertState)\
+        -> Tuple[ChallengeResponse, ErrorMessage]:
         if request.parameter_key == CHALLENGE_POSS_PARAMETER_KEY_PROOF.encode():
             # verify signaure
             credential = parse_certificate(cert_state.iden_value)
@@ -97,9 +100,10 @@ class PossessionAuthenticator(Authenticator):
                 mock_name[:] = csr_data.name[:]
                 mock_name[-2] = Component.from_str('ndncert-python') 
                 signer = self.tib.suggest_signer(mock_name)
-                issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python', csr_data.content, signer, datetime.utcnow(), 10000)
+                issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python', 
+                                                            csr_data.content, signer,
+                                                            datetime.utcnow(), 10000)
                 cert_state.issued_cert = issued_cert
-                
                 response = ChallengeResponse()
                 response.status = STATUS_SUCCESS
                 response.issued_cert_name = Name.encode(issued_cert_name)
@@ -107,13 +111,14 @@ class PossessionAuthenticator(Authenticator):
                 ca_prefix.append('CA')
                 response.forwarding_hint = Name.to_bytes(ca_prefix)
 
-                self.storage[cert_state.id] = cert_state
+                self.cache[cert_state.id] = cert_state
                 return response, None
             else:
                 errs = ErrorMessage()
                 errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
                 errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
-                logging.info(f'Identity verification failed, returning errors {ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
+                logging.info(f'Identity verification failed, returning errors'
+                             f'{ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
                 return None, errs
         else:
             errs = ErrorMessage()
