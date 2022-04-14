@@ -6,7 +6,7 @@ from ndn.encoding import Name, Component, FormalName, tlv_model
 
 from ndncert.proto.ndncert_proto import *
 from ndncert.proto.types import *
-from ndncert.util.ndncert_crypto import *
+from ndncert.utils.ndncert_crypto import *
 
 class Client(object):
     def __init__(self, app: NDNApp):

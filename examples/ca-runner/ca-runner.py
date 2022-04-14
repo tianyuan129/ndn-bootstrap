@@ -1,5 +1,5 @@
 import argparse
-from ndncert.util.config import get_yaml
+from ndncert.utils.config import get_yaml
 import logging
 import pkg_resources
 from ndn.app import NDNApp

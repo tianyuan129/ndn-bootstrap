@@ -4,7 +4,7 @@ import plyvel, logging
 
 from ndncert.proto.ndncert_proto import *
 from ndncert.proto.ca_storage import *
-from ndncert.util.sending_email import *
+from ndncert.utils.sending_email import *
 
 from ndn.encoding import Name
 from ndn.app import NDNApp

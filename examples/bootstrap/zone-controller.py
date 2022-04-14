@@ -9,7 +9,7 @@ from ndn.app_support.security_v2 import parse_certificate, derive_cert
 
 from ndncert.app_support.tib import Tib
 from ndncert.app.ca import Ca
-from ndncert.util.config import get_yaml
+from ndncert.utils.config import get_yaml
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
@@ -19,6 +19,7 @@ logging.basicConfig(format='[{asctime}]{levelname}:{message}',
 app = NDNApp()
     
 def save_bundle(file, filepath):
+    logging.debug(f'Signed bundle size: {len(file)} bytes')
     max_width = 70
     from base64 import b64encode
     from math import ceil

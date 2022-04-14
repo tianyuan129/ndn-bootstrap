@@ -13,7 +13,7 @@ from ndn.utils import gen_nonce
 
 from ndncert.app_support.tib import Tib
 from ndncert.proto.ndncert_proto import *
-from ndncert.util.ndncert_crypto import *
+from ndncert.utils.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
 
 from ndncert.auth import *
