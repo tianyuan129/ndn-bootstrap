@@ -1,6 +1,4 @@
 from tempfile import TemporaryDirectory
-from base64 import b64encode
-from math import ceil
 from datetime import datetime
 
 import logging, os, asyncio
@@ -22,10 +20,13 @@ app = NDNApp()
     
 def save_bundle(file, filepath):
     max_width = 70
+    from base64 import b64encode
+    from math import ceil
     with open(filepath, 'w') as bundle_file:
         bundle_str = b64encode(file).decode("utf-8")
-        for i in range(0, ceil(len(bundle_str) / max_width)):
-            line = bundle_str[i * max_width : (i + 1) * max_width] + '\n'
+        lines_needed = ceil(len(bundle_str) / max_width)
+        for i in range(0, lines_needed):
+            line = bundle_str[i * max_width : (i + 1) * max_width]  + '\n'
             bundle_file.write(line)    
 
 async def async_main(tmpdirname):
@@ -36,11 +37,12 @@ async def async_main(tmpdirname):
     
     zone_name = Name.from_str('/ndn/local/ucla')
     # need_tmpcert if you need separate authenticator and cert issuer
-    signed_bundle = Tib.construct_minimal_trust_zone(zone_name, keychain,
-        need_tmpcert = True, need_issuer = True)
+    signed_bundle = Tib.construct_minimal_trust_zone(zone_name,
+        keychain, need_tmpcert = True, need_issuer = True)
     
     # also need to get the signer, could be useful
-    anchor_signer_name = keychain[zone_name].default_key().default_cert().name
+    anchor_signer_name = keychain[zone_name].default_key() \
+                                            .default_cert().name
     anchor_signer = keychain.get_signer({'cert': anchor_signer_name})
     
     tib_base = os.path.join(tmpdirname, 'tib-test')
@@ -55,8 +57,9 @@ async def async_main(tmpdirname):
     
     # If we have separate authenticator and cert issuer, we need to set them up
     # There are several approaches to bootstrap authenticator and cert issuer, 
-    # which is outside the scope of this work.
-    # This example assumes both the authenticator and cert issuer is the trust anchor.
+    # which is outside the scope of this work. This example assumes both the 
+    # authenticator and cert issuer is the trust anchor.
+
     # filename = os.path.join(dirname, 'ndncert-ca.conf')        
     # config = get_yaml(filename)
     # print(config)
@@ -69,10 +72,14 @@ async def async_main(tmpdirname):
     auth_self_cert = parse_certificate(auth_self_cert_data)
     
     # derive a one week cert
-    auth_derived_cert_name,  auth_derived_cert_data = derive_cert(auth_id.default_key().name, 'Anchor',
-        auth_self_cert.content, anchor_signer, datetime.utcnow(), 168 * 3600)
-    logging.info(f"Deriving authenticator's certificate {Name.to_str(auth_derived_cert_name)}...")
-    keychain.import_cert(auth_id.default_key().name, auth_derived_cert_name, auth_derived_cert_data)
+    auth_derived_cert_name, auth_derived_cert_data = \
+         derive_cert(auth_id.default_key().name, 'Anchor',
+                     auth_self_cert.content, anchor_signer,
+                     datetime.utcnow(), 168 * 3600)
+    logging.info("Deriving authenticator's certificate" 
+                 f"{Name.to_str(auth_derived_cert_name)}...")
+    keychain.import_cert(auth_id.default_key().name, auth_derived_cert_name,
+                         auth_derived_cert_data)
     # start the NDNCERT CA for authenticator
     filename = os.path.join(dirname, 'ndncert-ca-auth.conf')        
     config = get_yaml(filename)
@@ -88,10 +95,14 @@ async def async_main(tmpdirname):
     issuer_self_cert = parse_certificate(issuer_self_cert_data)
     
     # derive a one week cert
-    issuer_derived_cert_name,  issuer_derived_cert_data = derive_cert(issuer_id.default_key().name, 'Anchor',
-        issuer_self_cert.content, anchor_signer, datetime.utcnow(), 168 * 3600)
-    logging.info(f"Deriving cert issuer's certificate {Name.to_str(issuer_derived_cert_name)}...")
-    keychain.import_cert(issuer_id.default_key().name, issuer_derived_cert_name, issuer_derived_cert_data)
+    issuer_derived_cert_name,  issuer_derived_cert_data = \
+        derive_cert(issuer_id.default_key().name, 'Anchor',
+                    issuer_self_cert.content, anchor_signer, 
+                    datetime.utcnow(), 168 * 3600)
+    logging.info("Deriving cert issuer's certificate"
+                 f"{Name.to_str(issuer_derived_cert_name)}...")
+    keychain.import_cert(issuer_id.default_key().name, issuer_derived_cert_name,
+                         issuer_derived_cert_data)
     # start the NDNCERT CA for cert issuer
     filename = os.path.join(dirname, 'ndncert-ca-issuer.conf')        
     config = get_yaml(filename)
