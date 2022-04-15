@@ -12,9 +12,9 @@ from ndncert.proto.ndncert_proto import *
 from ndncert.utils.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
 from ndncert.utils.sending_email import *
-from ndncert.app_support.tib import Tib
+from ndncert.security_support.tib import Tib
 
-from ..auth import Authenticator
+from .auth import Authenticator
 
 
 class EmailAuthenticator(Authenticator):

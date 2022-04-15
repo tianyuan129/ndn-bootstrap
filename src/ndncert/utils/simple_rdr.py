@@ -5,7 +5,7 @@ from ndn.app import NDNApp
 from ndn.encoding import Name, FormalName, Component
 from ndn.utils import timestamp
 
-from ndncert.app_support.tib import Tib
+from ndncert.security_support.tib import Tib
 
 # this producer will not register route
 class RdrProducer(object):

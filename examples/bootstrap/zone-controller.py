@@ -8,8 +8,8 @@ from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, LvsModel
 
-from ndncert.app_support.tib import Tib, TibBundle
-from ndncert.app_support.lvs_template import define_minimal_trust_zone,\
+from ndncert.security_support.tib import Tib, TibBundle
+from ndncert.security_support.lvs_template import define_minimal_trust_zone,\
     define_generic_cert, define_generic_data_rule
 from ndncert.app.ca import Ca
 from ndncert.utils.config import get_yaml

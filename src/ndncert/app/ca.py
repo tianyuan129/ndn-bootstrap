@@ -11,7 +11,7 @@ from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
 from ndn.app_support.security_v2 import parse_certificate
 from ndn.utils import gen_nonce
 
-from ndncert.app_support.tib import Tib
+from ndncert.security_support.tib import Tib
 from ndncert.proto.ndncert_proto import *
 from ndncert.utils.ndncert_crypto import *
 from ndncert.proto.ca_storage import *

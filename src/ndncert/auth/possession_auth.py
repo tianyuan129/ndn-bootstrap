@@ -6,7 +6,7 @@ import logging, os
 from ndn.encoding import Name, Component, parse_data
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
-from ndncert.app_support.tib import Tib
+from ndncert.security_support.tib import Tib
 from ndncert.proto.ndncert_proto import *
 from ndncert.utils.ndncert_crypto import *
 from ndncert.proto.ca_storage import *

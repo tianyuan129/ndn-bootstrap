@@ -6,7 +6,7 @@ import logging, os, asyncio
 from ndn.encoding import Name, Component, parse_data
 from ndn.app import NDNApp, InterestTimeout, InterestNack
 
-from ndncert.app_support.tib import Tib, TibBundle
+from ndncert.security_support.tib import Tib, TibBundle
 from ndncert.utils.simple_rdr import RdrConsumer
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
