@@ -26,8 +26,8 @@ class EmailAuthenticator(Authenticator):
         self.tib = tib
         self.app = app
         Authenticator.__init__(self, app, config, 'email', db_dir)
-        
-    
+
+   
     async def actions_before_challenge(self, request: ChallengeRequest, cert_state: CertState)\
         -> Tuple[ChallengeResponse, ErrorMessage]:
         cert_state.auth_mean = request.selected_challenge
@@ -106,11 +106,20 @@ class EmailAuthenticator(Authenticator):
             errs.info = ERROR_INVALID_PARAMTERS[1].encode()
             return None, errs
 
+    # plain_split: alice@gmail.com -> /alice/gmail.com
     def plain_split(self, identity_value: str) -> FormalName: 
         index = identity_value.rindex("@")
         return Name.from_str('/' + str(identity_value[:index]) + 
                              '/' + str(identity_value[index + 1:]))
     
+    # domain_split: alice@gmail.com -> /alice/gmail/com
+    def domain_split(self, identity_value: str) -> FormalName: 
+        index = identity_value.rindex("@")
+        user_part = str(identity_value[:index])
+        domain_part = str(identity_value[index + 1:])
+        domain_comps = [Component.from_str(seg) for seg in domain_part.rsplit('.')]
+        return [Component.from_str(user_part)] + domain_comps
+
     # map the inputs to the function blocks
     actions = {
         STATUS_BEFORE_CHALLENGE : actions_before_challenge,
