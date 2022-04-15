@@ -223,7 +223,6 @@ def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_
     # derive other certs from the cert issuer
     # EntityClassi: i len suffix after @zone_name 
     lvs += define_generic_cert(zone_name, '/suffix1', signee = 'EntityClass1', signer = cert_issuer)
-    # lvs += define_generic_cert(zone_name, '/_/_', 'EntityClass2', 'Issuer')
 
     # define app data produced by EntityClass
     # DataClassi: rule applied to EntityClassi
@@ -237,18 +236,12 @@ def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_
     constraints = [['_version', '$eq_type("v=0")']]
     lvs += define_generic_data_rule('Bundle', zone_name,
         # allow entity class publish data at one level deeper
-        variable_pattern = '/"BUNDLE"/_keyid/_version',
-        constraints = constraints,
-        signer = 'Anchor')
-
-    lvs += define_generic_data_rule('Bundle0', zone_name,
-        # allow entity class publish data at one level deeper
         variable_pattern = '/"BUNDLE"/_version',
         constraints = constraints,
         signer = 'Anchor')
     
-    # rdr
-    lvs += define_generic_data_rule('Bundle0Rdr', zone_name,
+    # RDR for Bundle
+    lvs += define_generic_data_rule('BundleRdr', zone_name,
         # allow entity class publish data at one level deeper
         variable_pattern = '/"BUNDLE"/"32=metadata"/_version/_',
         constraints = constraints,

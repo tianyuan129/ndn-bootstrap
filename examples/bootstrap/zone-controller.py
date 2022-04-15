@@ -2,15 +2,18 @@ from tempfile import TemporaryDirectory
 from datetime import datetime
 
 import logging, os, asyncio
-from ndn.encoding import Name, parse_data
+from ndn.encoding import Name
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
+from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, LvsModel
 
-from ndncert.app_support.tib import Tib
+from ndncert.app_support.tib import Tib, TibBundle
+from ndncert.app_support.lvs_template import define_minimal_trust_zone,\
+    define_generic_cert, define_generic_data_rule
 from ndncert.app.ca import Ca
 from ndncert.utils.config import get_yaml
-from ndncert.utils.rdr import RdrProducer
+from ndncert.utils.simple_rdr import RdrProducer
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
@@ -111,11 +114,37 @@ async def async_main(tmpdirname):
     ca_issuer = Ca(app, config, tib)
     ca_issuer.go()
 
-    # host bundle
+    # use rdr to host bundle
     rdr_pro = RdrProducer(app, Name.from_str('/ndn/local/ucla/BUNDLE'),
                           tib, register_route = True)
-    _, _, content, _ = parse_data(signed_bundle)
-    rdr_pro.produce(content)
+    async def update_bundle_after(wait_in_seconds):
+        await asyncio.sleep(wait_in_seconds)
+        updated_lvs = define_minimal_trust_zone(zone_name,
+            need_tmpcert = True, need_issuer = True)
+        # let's update schema so we can have EntityClass 2
+        
+        updated_lvs += define_generic_cert(zone_name, '/suffix1/suffix2',
+                                   signee = 'EntityClass2', signer = 'Issuer')
+        # define app data produced by EntityClass
+        # DataClassi: rule applied to EntityClassi
+        updated_lvs += define_generic_data_rule('DataClass2', zone_name,
+            # allow entity class publish data at one level deeper
+            variable_pattern = '/suffix1/suffix2/_',
+            #don't have constraints#,
+            signer = 'EntityClass2')
+        # a little formatting
+        updated_lvs.replace('\n\n', '\n')
+        logging.info(updated_lvs)
+        
+        updated_schema = compile_lvs(updated_lvs)
+        updated_bundle = TibBundle()
+        updated_bundle.schema = updated_schema
+        # we ignore the trust anchor if not updated
+        
+        rdr_pro.produce(updated_bundle.encode(), freshness_period = 3600)
+    
+    asyncio.create_task(update_bundle_after(5))
+
     
 if __name__ == "__main__":
     with TemporaryDirectory() as tmpdirname:

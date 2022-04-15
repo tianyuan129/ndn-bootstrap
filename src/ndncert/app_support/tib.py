@@ -158,6 +158,34 @@ class Tib(object):
                 bundle_file.write(line)
         return True, path
 
+    def install_trusted_bundle(self, bundle: TibBundle):
+        if bundle.anchor is not None:
+            self.anchor = bundle.anchor
+            self.anchor_data = parse_certificate(self.anchor)
+            anchor_name = self.anchor_data.name
+            if self.zone_prefix != anchor_name[:-4]:
+                raise TibError(f'Zone prefix conflict: {Name.to_str(self.zone_prefix)} '
+                               f'-> {Name.to_str(anchor_name[:-4])}')
+        if bundle.schema is not None:
+            self.schema = bundle.schema
+            self.checker = Checker(bundle.schema, DEFAULT_USER_FNS)
+            validator = lvs_validator(self.checker, self.app, self.anchor)
+            # a validator wrapper is needed to attach specific trust schema to trust zone namespace
+            async def _validator_wrapper(name, sig_ptrs):
+                if Name.is_prefix(self.zone_prefix, name):
+                    logging.debug(f'Trust Zone data, checking...')
+                    return await validator(name, sig_ptrs)
+                elif Name.is_prefix('/localhost', name):
+                    logging.debug(f'NFD management data, bypass {Name.to_str(name)}...')
+                    return True
+                elif Name.is_prefix('/localhop', name):
+                    logging.debug(f'NFD management data, bypass {Name.to_str(name)}...')
+                    return True
+                else:
+                    logging.debug(f'Neither schema defined nor NFD management data')
+                    return True
+            self.app.data_validator = _validator_wrapper
+
     @staticmethod
     def accept_signed_bundle(wire: bytes) -> Tuple[bool, TibBundle]:
         _, _, content, sig_ptrs = parse_data(wire)
@@ -307,13 +335,9 @@ class Tib(object):
         
         # sign the bundle
         trust_anchor_data = parse_certificate(bundle.anchor)
-        bundle_name = []
-        # copy till to the keyid
-        bundle_name[:] = trust_anchor_data.name[:-2]
-        # replace KEY => BUNDLE
-        bundle_name[-2] = Component.from_str('BUNDLE')
-        # append version
-        bundle_name.append(Component.from_version(timestamp()))
+        bundle_name = trust_anchor_data.name[:-4]
+        bundle_name += [Component.from_str('BUNDLE')]
+        bundle_name += [Component.from_version(timestamp())]
         bundle_signer = keychain.get_signer({'cert': trust_anchor_data.name})
         # bundle's freshness period should relatively long so can stay in the content store
         meta_info = MetaInfo.from_dict({'freshness_period': 10000})

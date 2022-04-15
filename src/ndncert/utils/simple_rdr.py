@@ -49,18 +49,18 @@ class RdrProducer(object):
         metadata_name = int_name
         metadata_name += [Component.from_version(timestamp())]
         metadata_name += [Component.from_segment(0)]
-        
+
         latest_pkt_name = self.objn + [Component.from_version(self.latest_version)]
         rawpkt = self.tib.sign_data(metadata_name, Name.to_bytes(latest_pkt_name),
                                     freshness_period = self.rdr_freshness)
         self.app.put_raw_packet(rawpkt)
 
-    def produce(self, content: bytes, freshness_period = 4000):
+    def produce(self, content: bytes, **kwargs):
         self.latest_version = timestamp()
         pkt_name = self.objn + [Component.from_version(self.latest_version)]
         # insert into cache
         created_at = datetime.utcnow()
-        rawpkt = self.tib.sign_data(pkt_name, content, freshness_period = freshness_period)
+        rawpkt = self.tib.sign_data(pkt_name, content, **kwargs)
         if len(rawpkt) >= 8800:
             logging.fatal(f'Packet is too large, need to be segmented!')
             return
@@ -69,19 +69,48 @@ class RdrProducer(object):
         
 
 class RdrConsumer(object):
+    class VersionError(Exception):
+        '''raised when RDR retrieved data version is decreasing'''
+        pass
     def __init__(self, app: NDNApp, object_name: FormalName):
         self.app = app
         self.objn = object_name
         self.latest_version = 0
-
     async def consume(self, **kwargs):
         # fetch the metadata        
         int_name = self.objn + [Component.from_str('32=metadata')]
         data_name, _, content = await self.app.express_interest(
             int_name, must_be_fresh=True, can_be_prefix=True, lifetime=6000)
+        
+        Name.from_bytes(latest_dataname)[-1]
+        Component.to_number()
+        
         logging.info(f'Receiving Metadata {Name.to_str(data_name)}')
         latest_dataname = Name.from_bytes(content)
+        observed_version = Component.to_number(latest_dataname[-1])
+        if observed_version < self.latest_version:
+            raise RdrConsumer.VersionError(f'Observed version {observed_version} <'
+                                           f'last observed version {self.latest_version}')
         logging.info(f'Receiving Data name {Name.to_str(latest_dataname)}')
         return await self.app.express_interest(latest_dataname, must_be_fresh=True,
-                                               can_be_prefix=False, lifetime=6000, **kwargs)
+                                            can_be_prefix=False, lifetime=6000, **kwargs)
+            
+    async def get_latest_version(self):
+        # fetch the metadata        
+        int_name = self.objn + [Component.from_str('32=metadata')]
+        data_name, _, content = await self.app.express_interest(
+            int_name, must_be_fresh=True, can_be_prefix=True, lifetime=6000)
         
+        logging.info(f'Receiving Metadata {Name.to_str(data_name)}')
+        latest_dataname = Name.from_bytes(content)
+        observed_version = Component.to_number(latest_dataname[-1])
+        if observed_version >= self.latest_version:        
+            return observed_version
+        else:
+            return self.latest_version
+        
+    async def get_versioned_data(self, version: int, **kwargs):        
+        # fetch the metadata        
+        int_name = self.objn + [Component.from_version(version)]
+        return await self.app.express_interest(int_name,
+            must_be_fresh=True, lifetime = 6000, **kwargs)
