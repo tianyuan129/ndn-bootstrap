@@ -218,7 +218,7 @@ class Tib(object):
         asyncio.create_task(self.register_keys())
     
     async def bootstrap(self, id_name: FormalName, selector: Selector, verifier: Verifier,
-                        need_tmpcert = False, need_issuer = False):
+                        need_auth = False, need_issuer = False):
         client = Client(self.app)
         
         anchor_name = self.anchor_data.name
@@ -230,7 +230,7 @@ class Tib(object):
                               f'prefix of identity name {Name.to_str(id_name)}')
 
         # the name used for authentication
-        if need_tmpcert:
+        if need_auth or need_issuer:
             id_authname = []
             id_authname[:] = id_name[:]
             id_authname.insert(len(zone_prefix), 'auth')
@@ -240,8 +240,8 @@ class Tib(object):
             authid_cert_data = parse_certificate(authid_key.default_cert().data)
             authid_signer = self.keychain.get_signer({'cert': authid_cert_data.name})
             _, csr = sign_req(authid_key.name, authid_cert_data.content, authid_signer)
-
-            auth_prefix = zone_prefix + [Component.from_str('auth')]
+            auth_prefix = zone_prefix + [Component.from_str('auth')] \
+                          if need_auth else zone_prefix
             issued_cert_name, forwarding_hint = await client.request_signing(auth_prefix, bytes(csr), 
                 authid_signer, selector, verifier)
             
@@ -279,24 +279,17 @@ class Tib(object):
             assert authid_signer.write_signature_value(wire, [memoryview(param_value)]) == len(wire)        
             return 'proof'.encode(), bytes(wire)
         
-        if need_issuer:
-            issuer_prefix = zone_prefix + [Component.from_str('cert')]
-        else:
-            issuer_prefix = zone_prefix
-        
         formal_id = self.keychain.touch_identity(id_name)
         formal_key = formal_id.default_key()
         formal_cert_data = parse_certificate(formal_key.default_cert().data)
         formal_signer = self.keychain.get_signer({'cert': formal_cert_data.name})
         _, csr = sign_req(formal_key.name, formal_cert_data.content, formal_signer)
-        
-        if need_issuer:
-            _selector = _select_possession
-            _verifier = _verify_possession
-        else:
-            _selector = selector
-            _verifier = verifier
 
+        _selector = _select_possession if need_auth or need_issuer else selector
+        _verifier = _verify_possession if need_auth or need_issuer else verifier
+        issuer_prefix = zone_prefix + [Component.from_str('cert')] \
+                          if need_issuer else zone_prefix
+            
         issued_cert_name, forwarding_hint = await client.request_signing(issuer_prefix, bytes(csr), 
             formal_signer, _selector, _verifier)
             
@@ -318,7 +311,7 @@ class Tib(object):
 
     # it will modify keychains
     @staticmethod
-    def construct_minimal_trust_zone(id_name: FormalName, keychain: KeychainSqlite3, need_tmpcert = False, need_issuer = False):
+    def construct_minimal_trust_zone(id_name: FormalName, keychain: KeychainSqlite3, need_auth = False, need_issuer = False):
         try:
             local_anchor_id = keychain[id_name]
         except:
@@ -326,7 +319,7 @@ class Tib(object):
         local_anchor_key = local_anchor_id.default_key()
         
         local_lvs = define_minimal_trust_zone(local_anchor_id.name, 
-            need_tmpcert=need_tmpcert, need_issuer=need_issuer)
+            need_auth=need_auth, need_issuer=need_issuer)
         logging.info(f'Generated LVS: {local_lvs}')   
         # generate TIB bundle
         bundle = TibBundle()

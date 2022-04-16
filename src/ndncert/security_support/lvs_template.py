@@ -187,7 +187,7 @@ def define_generic_data_rule(rule: str, zone_name: FormalName, **kwargs):
         variable_pattern = _variable_pattern)
     return _generic_rule + _prepared_constraints + _prepared_signer
 
-def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_issuer = False):
+def define_minimal_trust_zone(zone_name: FormalName, need_auth = False, need_issuer = False):
     lvs = ''
     lvs += define_key()
     lvs += define_delagatedkey()
@@ -208,14 +208,20 @@ def define_minimal_trust_zone(zone_name: FormalName, need_tmpcert = False, need_
     else:
         cert_issuer = 'Anchor'
 
-    if need_tmpcert:
-        lvs += define_tmpcert(zone_name, '/"auth"/_', signer = 'Auth')
+    if need_auth:
+        authenticator = 'Auth'
         # derive the authenticator from anchor
         lvs += define_generic_cert(zone_name, '/"auth"', signee ='Auth', signer = 'Anchor',
                                    key = 'DELEGATEDKEY')
         lvs += define_ndncert_proto(zone_name, issuer_var = Name.from_str('/auth'), 
             index = index, issuer_id = 'Auth', harden = True)
         index += 1
+    else:
+        authenticator = 'Anchor'
+    
+    # define the tmp cert
+    if need_auth or need_issuer:
+        lvs += define_tmpcert(zone_name, '/"auth"/_', signer = authenticator)
     
     # define ndncert proto for cert issuer
     lvs += define_ndncert_proto(zone_name, index = index, issuer_id = cert_issuer, harden = True)

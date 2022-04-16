@@ -115,7 +115,7 @@ class PossessionAuthenticator(Authenticator):
                 errs = ErrorMessage()
                 errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
                 errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
-                logging.info(f'Identity verification failed, returning errors'
+                logging.info(f'Identity verification failed, returning errors '
                              f'{ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
                 return None, errs
         else:
