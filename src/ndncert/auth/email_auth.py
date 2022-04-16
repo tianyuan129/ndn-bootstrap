@@ -120,6 +120,12 @@ class EmailAuthenticator(Authenticator):
         domain_comps = [Component.from_str(seg) for seg in domain_part.rsplit('.')]
         return [Component.from_str(user_part)] + domain_comps
 
+    # domain_split: alice@gmail.com -> /com/gmail/alice
+    def domain_split_reverse(self, identity_value: str) -> FormalName: 
+        splitted = self.domain_split(identity_value)
+        splitted.reverse()
+        return splitted
+        
     # map the inputs to the function blocks
     actions = {
         STATUS_BEFORE_CHALLENGE : actions_before_challenge,
