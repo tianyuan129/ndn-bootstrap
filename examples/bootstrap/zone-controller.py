@@ -12,7 +12,7 @@ from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS,
 from ndncert.security_support.tib import Tib, TibBundle
 from ndncert.security_support.lvs_template import define_minimal_trust_zone,\
     define_generic_cert, define_generic_data_rule
-from ndncert.app.ca import Ca
+from ndncert.app.ca_tib import CaWithTib
 from ndncert.utils.config import get_yaml
 from ndncert.utils.simple_rdr import RdrProducer
 
@@ -86,7 +86,9 @@ async def async_main(cmdline_args, tmpdirname):
 
     filename = os.path.join(dirname, 'ndncert-ca.conf')        
     config = get_yaml(filename)
-    ca = Ca(app, config, tib)
+    # overwrite with tmpdirname
+    config['db_config']['base'] = tmpdirname
+    ca = CaWithTib(app, config, tib)
     ca.go()
     
     # or we can manually bootstrap the authenticator and cert issuer in code
@@ -107,10 +109,12 @@ async def async_main(cmdline_args, tmpdirname):
         # start the NDNCERT CA for authenticator
         filename = os.path.join(dirname, 'ndncert-ca-auth.conf')        
         config = get_yaml(filename)
+        # overwrite with tmpdirname
+        config['db_config']['base'] = tmpdirname
         print(config)
         
         # using the same tib so we don't need reconfiguration
-        ca_auth = Ca(app, config, tib)
+        ca_auth = CaWithTib(app, config, tib)
         ca_auth.go()
     
     if cmdline_args.issuer:
@@ -131,7 +135,9 @@ async def async_main(cmdline_args, tmpdirname):
         # start the NDNCERT CA for cert issuer
         filename = os.path.join(dirname, 'ndncert-ca-issuer.conf')        
         config = get_yaml(filename)
-        ca_issuer = Ca(app, config, tib)
+        # overwrite with tmpdirname
+        config['db_config']['base'] = tmpdirname
+        ca_issuer = CaWithTib(app, config, tib)
         ca_issuer.go()
 
     # use rdr to host bundle

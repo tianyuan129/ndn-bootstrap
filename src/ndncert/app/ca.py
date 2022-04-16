@@ -9,17 +9,19 @@ from datetime import datetime
 from ndn.app import NDNApp
 from ndn.encoding import Name, InterestParam, BinaryStr, FormalName
 from ndn.app_support.security_v2 import parse_certificate
+from ndn.security import KeychainSqlite3
 from ndn.utils import gen_nonce
 
-from ndncert.security_support.tib import Tib
 from ndncert.proto.ndncert_proto import *
 from ndncert.utils.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
+from ndncert.proto.types import GetSigner
 
 from ndncert.auth import *
 
 class Ca(object):
-    def __init__(self, app: NDNApp, config: Dict, tib: Tib):
+    def __init__(self, app: NDNApp, config: Dict, keychain: KeychainSqlite3,
+                 get_signer: GetSigner):
         #todo: customize the storage type
         self.requests = {}
         
@@ -31,8 +33,11 @@ class Ca(object):
         self.cache = {}
         self.config = config
         self.ca_prefix = self.config['prefix_config']['prefix_name']
-        self.tib = tib
-        self.keychain = self.tib.keychain
+        # self.tib = tib
+        self.keychain = keychain
+        
+        # keychain or tib based signer
+        self.get_signer = get_signer
 
         try:
             ca_id = self.keychain[self.ca_prefix]
@@ -43,8 +48,9 @@ class Ca(object):
             ca_cert = ca_id.default_key().default_cert().data
             self.ca_cert_data = parse_certificate(ca_cert)
 
-        # save to tib base
-        self.db_init(self.tib.get_path())
+        # save to db base
+        path = os.path.expanduser(config['db_config']['base'])
+        self.db_init(path)
         self.app = app
         app.keychain = self.keychain
 
@@ -96,8 +102,9 @@ class Ca(object):
             if str(auth_method) != 'operator_email':
                 response.challenges.append(str(auth_method).encode())
                 
-        raw_pkt = self.tib.sign_data(name, response.encode(), freshness_period=10000)
-        self.app.put_raw_packet(raw_pkt)
+        # raw_pkt = self.tib.sign_data(name, response.encode(), freshness_period=10000)
+        self.app.put_data(name, response.encode(), freshness_period = 10000,
+                          signer = self.get_signer(name))
 
         cert_state = CertState()
         ecdh.encrypt(bytes(pub), response.salt, response.request_id)
@@ -143,15 +150,15 @@ class Ca(object):
             errs = ErrorMessage()
             errs.code = ERROR_INVALID_PARAMTERS[0]
             errs.info = ERROR_INVALID_PARAMTERS[1].encode()
-            raw_pkt = self.tib.sign_data(name, err.encode(), freshness_period=10000)
-            self.app.put_raw_packet(raw_pkt)
+            self.app.put_data(name, errs.encode(), freshness_period = 10000,
+                              signer = self.get_signer(name))
             return
         
         challenge_str = challenge_type.capitalize() + 'Authenticator'
         # cast the corresponding challenge actor
         actor = getattr(sys.modules[__name__], challenge_str)
         # definitely not the right way to do
-        actor.__init__(actor, self.app, self.requests, self.config, self.db_dir, self.tib)
+        actor.__init__(actor, self.app, self.requests, self.config, self.db_dir, self.get_signer)
         
         response, err = await actor.actions[cert_state.status](actor, request, cert_state)
 
@@ -176,9 +183,8 @@ class Ca(object):
                 plaintext, self.iv_random, self.iv_counter)
 
             cert_state.iv_counter = self.iv_counter
-            raw_pkt = self.tib.sign_data(name, message_out.encode(), freshness_period=10000)
-            self.app.put_raw_packet(raw_pkt)
-            
+            self.app.put_data(name, message_out.encode(), freshness_period = 10000,
+                              signer = self.get_signer(name))
             if cert_state.issued_cert is not None:
                 issued_cert = parse_certificate(cert_state.issued_cert)
                 self.cache[Name.to_bytes(issued_cert.name)] = cert_state.issued_cert
@@ -193,10 +199,10 @@ class Ca(object):
             self.db = plyvel.DB(self.db_dir)
             self.db.put(b'approved_requests', self.approved_requests.encode())
             self.db.close()
-        else:
+        if err is not None:
             assert err is not None
-            raw_pkt = self.tib.sign_data(name, err.encode(), freshness_period=10000)
-            self.app.put_raw_packet(raw_pkt)
+            self.app.put_data(name, err.encode(), freshness_period = 10000,
+                              signer = self.get_signer(name))
             # rejected, put into the rejected list
             self.rejected_requests.states.append(cert_state)
             self.db = plyvel.DB(self.db_dir)

@@ -11,6 +11,7 @@ from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndncert.proto.ndncert_proto import *
 from ndncert.utils.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
+from ndncert.proto.types import GetSigner
 from ndncert.utils.sending_email import *
 from ndncert.security_support.tib import Tib
 
@@ -18,12 +19,12 @@ from .auth import Authenticator
 
 
 class EmailAuthenticator(Authenticator):
-    def __init__(self, app: NDNApp, cache: Dict, config: Dict, db_dir: str, tib: Tib):
+    def __init__(self, app: NDNApp, cache: Dict, config: Dict, db_dir: str, get_signer: GetSigner):
         self.cache = cache
         self.config = config 
         ca_name_str = config['prefix_config']['prefix_name'] + '/CA'
         self.ca_name = Name.from_str(ca_name_str)
-        self.tib = tib
+        self.get_signer = get_signer
         self.app = app
         Authenticator.__init__(self, app, config, 'email', db_dir)
 
@@ -79,9 +80,8 @@ class EmailAuthenticator(Authenticator):
                 mock_name = []
                 mock_name[:] = csr_data.name[:]
                 mock_name[-2] = Component.from_str('ndncert-python') 
-                signer = self.tib.suggest_signer(mock_name)
                 issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python',
-                                                            csr_data.content, signer,
+                                                            csr_data.content, self.get_signer(mock_name),
                                                             datetime.utcnow(), 10000)
                 cert_state.issued_cert = issued_cert
                 response = ChallengeResponse()

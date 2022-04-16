@@ -2,7 +2,7 @@ import os
 
 import plyvel
 import logging
-from proto.ca_storage import *
+from ndncert.proto.ca_storage import *
 from ndn.encoding import Name
 from aiohttp import web
 import socketio
@@ -17,7 +17,6 @@ from ndn.app_support.security_v2 import parse_certificate
 ca_prefix = 'N/A'
 approved_requests = IssuedCertStates()
 rejected_requests = RejectedCertStates()
-manual_approved = ManualApprovalList()
 
 rejected_bindings = IdentityBindingList()
 approved_bindings = IdentityBindingList()
@@ -30,6 +29,9 @@ def gui_main():
     base_path = os.getcwd() + '/gui'
     # Serve static content from /static
     app = web.Application()
+    
+    dirname = os.path.dirname(__file__)
+    base_path = os.path.join(dirname, 'gui')
     aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader(os.path.join(base_path, 'templates')))
     app.router.add_static(prefix='/static', path=os.path.join(base_path, 'static'))
     routes = web.RouteTableDef()

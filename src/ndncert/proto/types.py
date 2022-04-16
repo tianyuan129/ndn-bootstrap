@@ -1,4 +1,8 @@
-from typing import Callable, Tuple, List
+from ast import Call
+from typing import Any, Callable, Tuple, List, Optional
+from ndn.encoding import NonStrictName, FormalName, BinaryStr, VarBinaryStr, Signer
+
+GetSigner = Callable[[NonStrictName], Signer]
 
 Selector = Callable[[List[bytes]], Tuple[bytes, bytes, bytes]]
 

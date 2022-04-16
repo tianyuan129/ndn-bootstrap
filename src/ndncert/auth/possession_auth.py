@@ -2,6 +2,7 @@ from typing import Tuple, Dict, Any
 from datetime import datetime
 
 import logging, os
+from unittest import mock
 
 from ndn.encoding import Name, Component, parse_data
 from ndn.app import NDNApp
@@ -10,6 +11,7 @@ from ndncert.security_support.tib import Tib
 from ndncert.proto.ndncert_proto import *
 from ndncert.utils.ndncert_crypto import *
 from ndncert.proto.ca_storage import *
+from ndncert.proto.types import GetSigner
 from ndncert.utils.sending_email import *
 
 from Cryptodome.Hash import SHA256
@@ -20,11 +22,11 @@ from .auth import Authenticator
 
 class PossessionAuthenticator(Authenticator):
     def __init__(self, app: NDNApp, cache: Dict[bytes, Any],
-                 config: Dict, db_dir: str, tib: Tib):
+                 config: Dict, db_dir: str, get_signer: GetSigner):
         self.cache = cache
         ca_name_str = config['prefix_config']['prefix_name'] + '/CA'
         self.ca_name = Name.from_str(ca_name_str)
-        self.tib = tib
+        self.get_signer = get_signer
         self.config = config
         Authenticator.__init__(self, app, self.config, 'possession', db_dir)
     
@@ -96,10 +98,9 @@ class PossessionAuthenticator(Authenticator):
                 # signer suggester must take a full name as input, so let's mock one
                 mock_name = []
                 mock_name[:] = csr_data.name[:]
-                mock_name[-2] = Component.from_str('ndncert-python') 
-                signer = self.tib.suggest_signer(mock_name)
+                mock_name[-2] = Component.from_str('ndncert-python')
                 issued_cert_name, issued_cert = derive_cert(csr_data.name[:-2], 'ndncert-python', 
-                                                            csr_data.content, signer,
+                                                            csr_data.content, self.get_signer(mock_name),
                                                             datetime.utcnow(), 10000)
                 cert_state.issued_cert = issued_cert
                 response = ChallengeResponse()
