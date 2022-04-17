@@ -1,14 +1,10 @@
-from base64 import b64decode
-from typing import Tuple, List
-import argparse
-
-import logging, os, sys, asyncio
+import logging, os, asyncio
 from ndn.encoding import Name, Component, parse_data, NonStrictName
 from ndn.app import NDNApp, InterestTimeout, InterestNack
 
 from ..ndncert.proto.types import Selector, Verifier
-from bootstrap.tib import Tib, TibBundle
-from bootstrap.app_support.simple_rdr import RdrConsumer
+from ..tib import Tib, TibBundle
+from ..app_support.simple_rdr import RdrConsumer
 
 class ZoneEntity(object):
     def __init__(self, app: NDNApp, path: str, signed_bundle: bytes):

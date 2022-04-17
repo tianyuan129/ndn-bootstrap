@@ -1,9 +1,9 @@
 from tempfile import TemporaryDirectory
 import argparse
-from typing import Optional
+from typing import Dict
 
 import logging, os, sys, asyncio
-from ndn.encoding import Name, InterestParam, BinaryStr, FormalName, MetaInfo
+from ndn.encoding import Name
 from ndn.app import NDNApp
 
 
@@ -17,16 +17,6 @@ logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     style='{')
 
 app = NDNApp()
-
-# @app.route('/example/testApp')
-# def on_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
-#     print(f'>> I: {Name.to_str(name)}, {param}')
-#     content = "Hello, world!".encode()
-#     app.put_data(name, content=content, freshness_period=10000)
-#     print(f'<< D: {Name.to_str(name)}')
-#     print(MetaInfo(freshness_period=10000))
-#     print(f'Content: (size: {len(content)})')
-#     print('')
 
 def process_cmd_opts():
     """
@@ -57,8 +47,11 @@ def save_bundle(file, filepath):
         lines_needed = ceil(len(bundle_str) / max_width)
         for i in range(0, lines_needed):
             line = bundle_str[i * max_width : (i + 1) * max_width]  + '\n'
-            bundle_file.write(line)    
+            bundle_file.write(line) 
 
+def define_email_auth_lvs(config: Dict):
+    
+    pass
             
 async def control(cmdline_args, tmpdirname):
     zone_name = Name.from_str('/ndn/local/ucla')

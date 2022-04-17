@@ -8,15 +8,10 @@ from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.app_support.light_versec import compile_lvs
 
 
-from bootstrap.tib import Tib, TibBundle
-from bootstrap.app_support.ca_tib import CaWithTib
-from bootstrap.ndncert.utils.config import get_yaml
-from bootstrap.app_support.simple_rdr import RdrProducer
-
-logging.basicConfig(format='[{asctime}]{levelname}:{message}',
-                    datefmt='%Y-%m-%d %H:%M:%S',
-                    level=logging.DEBUG,
-                    style='{')
+from ..tib import Tib, TibBundle
+from ..app_support.ca_tib import CaWithTib
+from ..ndncert.utils.config import get_yaml
+from ..app_support.simple_rdr import RdrProducer
 
 app = NDNApp()
 
