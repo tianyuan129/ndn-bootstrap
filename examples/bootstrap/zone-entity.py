@@ -34,8 +34,7 @@ def process_cmd_opts():
 
 async def select_first(list: List[bytes]) -> Tuple[bytes, bytes, bytes]:
     return list[0], "email".encode(), "tianyuan@tianyuan.ndn".encode()
-    
-    
+
 async def email_verifier(challenge_status: bytes, param_key: bytes, param_value: bytes) -> Tuple[bytes, bytes]:
     assert param_key is None
     assert param_value is None
