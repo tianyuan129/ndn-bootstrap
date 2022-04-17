@@ -118,3 +118,5 @@ checkpoint
 
 # pytest
 .pytest_cache
+
+*.bundle
