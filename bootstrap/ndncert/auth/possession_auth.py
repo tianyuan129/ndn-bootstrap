@@ -2,17 +2,15 @@ from typing import Tuple, Dict, Any
 from datetime import datetime
 
 import logging, os
-from unittest import mock
 
 from ndn.encoding import Name, Component, parse_data
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
-from ndncert.security_support.tib import Tib
-from ndncert.proto.ndncert_proto import *
-from ndncert.utils.ndncert_crypto import *
-from ndncert.proto.ca_storage import *
-from ndncert.proto.types import GetSigner
-from ndncert.utils.sending_email import *
+from ..proto.ndncert_proto import *
+from ..utils.ndncert_crypto import *
+from ..proto.ca_storage import *
+from ..proto.types import GetSigner
+from ..utils.sending_email import *
 
 from Cryptodome.Hash import SHA256
 from Cryptodome.PublicKey import ECC

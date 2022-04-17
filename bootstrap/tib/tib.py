@@ -28,9 +28,9 @@ from ndn.security import TpmFile, KeychainSqlite3, verify_ecdsa
 from ndn.utils import timestamp
 from ndn.app import NDNApp
 
-from ndncert.app.client import Client, Selector, Verifier
-from ndncert.proto.ndncert_proto import ChallengeRequest
-from ndncert.proto.types import *
+from ..ndncert.app.client import Client, Selector, Verifier
+from ..ndncert.proto.ndncert_proto import ChallengeRequest
+from ..ndncert.proto.types import *
 from .lvs_template import define_minimal_trust_zone
 
 TLV_TIB_BUNDLE_ANCHOR = 301
@@ -123,10 +123,6 @@ class Tib(object):
         
         # initialzing key handles
         self._key_handles = []
-        
-
-    def get_path(self):
-        return self.base_dir
     
     # this function will only creates the directory, not initializing the keychain
     @staticmethod
@@ -200,7 +196,7 @@ class Tib(object):
             
             if key_prefix not in self._key_handles:
                 logging.debug(f'TIB registers for {Name.to_str(key_prefix)}')
-                @self.app.route(key_prefix, validator=self.app.data_validator)
+                @self.app.route(key_prefix)
                 def _on_cert_retrieval(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr]):
                     for id_name in self.keychain:
                         identity = self.keychain[id_name]
@@ -214,7 +210,7 @@ class Tib(object):
                                     self.app.put_raw_packet(cert)
                 self._key_handles.append(key_prefix)
 
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(1)
         asyncio.create_task(self.register_keys())
     
     async def bootstrap(self, id_name: FormalName, selector: Selector, verifier: Verifier,
@@ -320,7 +316,6 @@ class Tib(object):
         
         local_lvs = define_minimal_trust_zone(local_anchor_id.name, 
             need_auth=need_auth, need_issuer=need_issuer)
-        logging.info(f'Generated LVS: {local_lvs}')   
         # generate TIB bundle
         bundle = TibBundle()
         bundle.anchor = local_anchor_key.default_cert().data
@@ -334,7 +329,7 @@ class Tib(object):
         bundle_signer = keychain.get_signer({'cert': trust_anchor_data.name})
         # bundle's freshness period should relatively long so can stay in the content store
         meta_info = MetaInfo.from_dict({'freshness_period': 10000})
-        return make_data(bundle_name, meta_info, bundle.encode(), signer=bundle_signer)
+        return local_lvs, make_data(bundle_name, meta_info, bundle.encode(), signer=bundle_signer)
     
     def suggest_signer(self, name: NonStrictName):
         # locate the matching signing certificate  
@@ -362,3 +357,7 @@ class Tib(object):
         
         logging.debug(f'Generating bundle {Name.to_str(bundle_name)}...')        
         return self.sign_data(bundle_name, bundle_wire)
+    
+    
+    def get_path(self):
+        return self.base_dir

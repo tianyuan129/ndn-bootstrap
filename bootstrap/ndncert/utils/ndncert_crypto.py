@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key,lo
 from ecdsa import SigningKey, VerifyingKey, NIST256p
 from Cryptodome.Cipher import AES
 
-from ndncert.proto.ndncert_proto import *
+from ..proto.ndncert_proto import *
 
 class ECDH:
     def __init__(self):

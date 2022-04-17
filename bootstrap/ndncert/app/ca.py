@@ -12,12 +12,12 @@ from ndn.app_support.security_v2 import parse_certificate
 from ndn.security import KeychainSqlite3
 from ndn.utils import gen_nonce
 
-from ndncert.proto.ndncert_proto import *
-from ndncert.utils.ndncert_crypto import *
-from ndncert.proto.ca_storage import *
-from ndncert.proto.types import GetSigner
+from ..proto.ndncert_proto import *
+from ..utils.ndncert_crypto import *
+from ..proto.ca_storage import *
+from ..proto.types import GetSigner
 
-from ndncert.auth import *
+from ..auth import *
 
 class Ca(object):
     def __init__(self, app: NDNApp, config: Dict, keychain: KeychainSqlite3,
@@ -262,6 +262,26 @@ class Ca(object):
         logging.debug(f'Clear the cache...')
         self.cache.pop(Name.to_bytes(name))
 
-    def go(self):
-        self.app.route(self.ca_prefix + '/CA')(None)
-        self.app.set_interest_filter(self.ca_prefix + '/CA', self._on_interest)
+    def register(self):
+        logging.debug(f'Registers for {Name.to_str(self.ca_prefix + "/CA")}')
+        
+        # self.app.route(self.ca_prefix + '/CA')(None)
+        # self.app.set_interest_filter(self.ca_prefix + '/CA', self._on_interest)
+        
+        @self.app.route(self.ca_prefix + '/CA')
+        def _on_interest(name: FormalName, param: InterestParam, _app_param: Optional[BinaryStr] | None):
+            logging.debug(f'inside...')
+            # dispatch to corresponding handlers
+            if Name.is_prefix(self.ca_prefix + '/CA/NEW', name):
+                asyncio.create_task(self.on_new_interest(name, param, _app_param))
+                return
+            if Name.is_prefix(self.ca_prefix + '/CA/CHALLENGE', name):
+                asyncio.create_task(self.on_challenge_interest(name, param, _app_param))
+                return
+            
+            # check whether can respond from cert cache
+            try:
+                self.cache[Name.to_bytes(name)]
+            except KeyError:
+                return
+            self.app.put_raw_packet(self.cache[Name.to_bytes(name)])

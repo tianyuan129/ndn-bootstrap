@@ -2,9 +2,9 @@ from typing import Tuple, Dict
 from abc import abstractmethod
 import plyvel, logging
 
-from ndncert.proto.ndncert_proto import *
-from ndncert.proto.ca_storage import *
-from ndncert.utils.sending_email import *
+from ..proto.ndncert_proto import *
+from ..proto.ca_storage import *
+from ..utils.sending_email import *
 
 from ndn.encoding import Name
 from ndn.app import NDNApp

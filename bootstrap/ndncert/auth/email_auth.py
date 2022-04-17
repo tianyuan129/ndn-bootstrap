@@ -8,12 +8,11 @@ from ndn.encoding import Name, FormalName, Component
 from ndn.app import NDNApp
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 
-from ndncert.proto.ndncert_proto import *
-from ndncert.utils.ndncert_crypto import *
-from ndncert.proto.ca_storage import *
-from ndncert.proto.types import GetSigner
-from ndncert.utils.sending_email import *
-from ndncert.security_support.tib import Tib
+from ..proto.ndncert_proto import *
+from ..utils.ndncert_crypto import *
+from ..proto.ca_storage import *
+from ..proto.types import GetSigner
+from ..utils.sending_email import *
 
 from .auth import Authenticator
 

@@ -1,7 +1,7 @@
 from typing import Dict
-from .ca import Ca
+from ..ndncert.app.ca import Ca
 from ndn.app import NDNApp
-from ndncert.security_support.tib import Tib
+from ..tib import Tib
 
 class CaWithTib(Ca):
     def __init__(self, app: NDNApp, config: Dict, tib: Tib):

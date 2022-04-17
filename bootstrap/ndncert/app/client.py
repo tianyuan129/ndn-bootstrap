@@ -4,9 +4,9 @@ import logging
 from ndn.app import NDNApp
 from ndn.encoding import Name, Component, FormalName, tlv_model
 
-from ndncert.proto.ndncert_proto import *
-from ndncert.proto.types import *
-from ndncert.utils.ndncert_crypto import *
+from ..proto.ndncert_proto import *
+from ..proto.types import *
+from ..utils.ndncert_crypto import *
 
 class Client(object):
     def __init__(self, app: NDNApp):
@@ -22,7 +22,7 @@ class Client(object):
         if len(self.iv_random_last):
             if random_part != self.iv_random_last:
                 raise ProtoError(f'Random part of AES IV not equal')
-            else:
+            else: 
                 pass
         if self.counter_last > 0:
             if counter < self.counter_last:
