@@ -1,6 +1,7 @@
 from datetime import datetime
-
 import logging, os, asyncio
+from typing import Dict
+
 from ndn.encoding import Name, Component, NonStrictName
 from ndn.security import KeychainSqlite3, TpmFile
 from ndn.app import NDNApp
@@ -17,7 +18,7 @@ app = NDNApp()
 
 class ZoneController(object):
     def __init__(self, app: NDNApp, path: str, zone_name: NonStrictName,
-                 need_auth = False, need_issuer = False):
+                 config_file: str, need_auth = False, need_issuer = False):
         self.zone_name = Name.normalize(zone_name)
         
         pib_file = os.path.join(path, 'pib.db')
@@ -25,9 +26,8 @@ class ZoneController(object):
         KeychainSqlite3.initialize(pib_file, 'tpm-file', tpm_dir)
         keychain = KeychainSqlite3(pib_file, TpmFile(tpm_dir))
         
-        zone_name = Name.from_str('/ndn/local/ucla')
         # if you need separate authenticator and cert issuer
-        self.lvs, self.signed_bundle = Tib.construct_minimal_trust_zone(zone_name,
+        self.lvs, self.signed_bundle = Tib.construct_minimal_trust_zone(self.zone_name,
             keychain, need_auth = need_auth, need_issuer = need_issuer)
         tib_base = os.path.join(path, 'controller-tib')
         Tib.initialize(self.signed_bundle, tib_base)
@@ -44,13 +44,33 @@ class ZoneController(object):
         
         # initialize ndncert
         dirname = os.path.dirname(__file__)
-        filename = os.path.join(dirname, 'ndncert-ca.conf')        
+        filename = os.path.join(dirname, 'ca-template.conf')        
         config = get_yaml(filename)
-        
-        # overwrite with tib path
-        config['db_config']['base'] = self.tib.get_path()
-        self.ca = CaWithTib(app, config, self.tib)
-        self.ca.register()
+
+        # load authentication config
+        auth_config = get_yaml(config_file)
+
+        # overwrite config
+        if not (need_auth and need_issuer):
+            # we still a ca controlled by anchor
+            config['prefix_config']['prefix_name'] = Name.to_str(self.zone_name)
+            config['db_config']['base'] = os.path.join(self.tib.get_path(), 'anchor')
+
+            # the anchor controlled ca may does authentication
+            if not need_auth:
+                config['auth_config'] = auth_config['auth_config']
+            
+            print(config)
+            # the anchor controlled ca may issue final certificate
+            if not need_issuer:
+                if config['auth_config']:
+                    config['auth_config']['possession'] = {'user_func': 'autopass'} 
+                else:
+                    config['auth_config'] = {'possession': {'user_func': 'autopass'}}
+            
+            print(config)
+            self.ca = CaWithTib(app, config, self.tib)
+            self.ca.register()
             
         # use rdr to host bundle
         self.rdrpro = RdrProducer(app, self.zone_name + [Component.from_str('BUNDLE')],
@@ -59,7 +79,7 @@ class ZoneController(object):
         # If we have separate authenticator and cert issuer, we need to set them up
         # or we can manually bootstrap the authenticator and cert issuer in code
         if need_auth:
-            auth_id = self.tib.keychain.touch_identity('/ndn/local/ucla/auth')
+            auth_id = self.tib.keychain.touch_identity(self.zone_name + [Component.from_str('auth')])
             auth_self_cert_data = auth_id.default_key().default_cert().data
             auth_self_cert = parse_certificate(auth_self_cert_data)
             
@@ -74,11 +94,10 @@ class ZoneController(object):
                                           auth_derived_cert_name,
                                           auth_derived_cert_data)
             # start the NDNCERT CA for authenticator
-            filename = os.path.join(dirname, 'ndncert-ca-auth.conf')        
             config = get_yaml(filename)
-
-            # overwrite with tib path
-            config['db_config']['base'] = self.tib.get_path()
+            config['prefix_config']['prefix_name'] = Name.to_str(auth_id.name)
+            config['db_config']['base'] = os.path.join(self.tib.get_path(), 'auth')
+            config['auth_config'] = auth_config['auth_config']
             print(config)
             
             # using the same tib so we don't need reconfiguration
@@ -87,7 +106,7 @@ class ZoneController(object):
         
         if need_issuer:
             # manually bootstrap the cert issuer
-            issuer_id = self.tib.keychain.touch_identity('/ndn/local/ucla/cert')
+            issuer_id = self.tib.keychain.touch_identity(self.zone_name + [Component.from_str('cert')])
             issuer_self_cert_data = issuer_id.default_key().default_cert().data
             issuer_self_cert = parse_certificate(issuer_self_cert_data)
             
@@ -102,12 +121,14 @@ class ZoneController(object):
                                           issuer_derived_cert_name,
                                           issuer_derived_cert_data)
             # start the NDNCERT CA for cert issuer
-            filename = os.path.join(dirname, 'ndncert-ca-issuer.conf')        
             config = get_yaml(filename)
-
-            # overwrite with tmpdirname
-            # overwrite with tib path
-            config['db_config']['base'] = self.tib.get_path()
+            config['prefix_config']['prefix_name'] = Name.to_str(issuer_id.name)
+            config['db_config']['base'] = os.path.join(self.tib.get_path(), 'cert')
+            if config['auth_config']:
+                config['auth_config']['possession'] = {'user_func': 'autopass'} 
+            else:
+                config['auth_config'] = {'possession': {'user_func': 'autopass'}}
+                    
             self.ca_issuer = CaWithTib(app, config, self.tib)
             self.ca_issuer.register()
 

@@ -48,20 +48,16 @@ def save_bundle(file, filepath):
         for i in range(0, lines_needed):
             line = bundle_str[i * max_width : (i + 1) * max_width]  + '\n'
             bundle_file.write(line) 
-
-def define_email_auth_lvs(config: Dict):
-    
-    pass
             
 async def control(cmdline_args, tmpdirname):
-    zone_name = Name.from_str('/ndn/local/ucla')
-    controller = ZoneController(app, tmpdirname, zone_name,
-                                cmdline_args.auth, cmdline_args.issuer)
-    # controller.ca.register()
-    
-    # controller.register_route(cmdline_args.auth, cmdline_args.issuer)
-    # also write to the local dir to enable out-of-band sharing
     dirname = os.path.dirname(__file__)
+    zone_name = Name.from_str('/ndn/local/ucla')
+    
+    filename = os.path.join(dirname, 'authentication.conf')
+    controller = ZoneController(app, tmpdirname, zone_name, filename,
+                                cmdline_args.auth, cmdline_args.issuer)
+
+    # also write to the local dir to enable out-of-band sharing
     filename = os.path.join(dirname, 'ndn-local-ucla.bundle')
     controller.save_bundle(filename)
 
@@ -82,7 +78,6 @@ async def control(cmdline_args, tmpdirname):
             signer = 'EntityClass2')
         # a little formatting
         updated_lvs.replace('\n\n', '\n')
-        logging.info(updated_lvs)
         controller.update_schema(updated_lvs)
     asyncio.create_task(update_bundle_after(5))
 
