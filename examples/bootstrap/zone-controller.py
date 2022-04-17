@@ -1,6 +1,5 @@
 from tempfile import TemporaryDirectory
 import argparse
-from typing import Dict
 
 import logging, os, sys, asyncio
 from ndn.encoding import Name
@@ -9,7 +8,6 @@ from ndn.app import NDNApp
 
 from bootstrap.tib import define_generic_cert, define_generic_data_rule
 from bootstrap.mini.controller import ZoneController
-from bootstrap.app_support.ca_tib import CaWithTib
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',

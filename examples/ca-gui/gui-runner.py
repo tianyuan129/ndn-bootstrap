@@ -2,7 +2,7 @@ import os
 
 import plyvel
 import logging
-from ndncert.proto.ca_storage import *
+from bootstrap.ndncert.proto.ca_storage import *
 from ndn.encoding import Name
 from aiohttp import web
 import socketio

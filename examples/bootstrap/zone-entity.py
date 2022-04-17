@@ -4,12 +4,8 @@ from tempfile import TemporaryDirectory
 import argparse
 
 import logging, os, sys, asyncio
-from ndn.encoding import Name, Component, parse_data
-from ndn.app import NDNApp, InterestTimeout, InterestNack
+from ndn.app import NDNApp
 from bootstrap.mini.entity import ZoneEntity
-
-from bootstrap.tib import Tib, TibBundle
-from bootstrap.app_support.simple_rdr import RdrConsumer
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     datefmt='%Y-%m-%d %H:%M:%S',
