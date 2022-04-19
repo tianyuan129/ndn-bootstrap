@@ -19,10 +19,10 @@ Please see our documentation_ if you have any issues.
     :target: https://pypi.org/project/ndn-bootstrap/
     :alt: Release Ver
 
-.. |Doc Badge| image:: https://readthedocs.org/projects/ndn-botstrap/badge/?version=latest
-    :target: https://ndn-botstrap.readthedocs.io/en/latest/?badge=latest
+.. |Doc Badge| image:: https://readthedocs.org/projects/ndn-bootstrap/badge/?version=latest
+    :target: https://ndn-bootstrap.readthedocs.io/en/latest/?badge=latest
     :alt: Doc Status
 
 .. _python-ndn: https://github.com/named-data/python-ndn
 
-.. _documentation: https://ndn-botstrap.readthedocs.io/en/latest/index.html
+.. _documentation: https://ndn-bootstrap.readthedocs.io/en/latest/index.html
