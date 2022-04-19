@@ -14,16 +14,12 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../src'))
 
-from bootstrap import __version__
 
 # -- Project information -----------------------------------------------------
 
 project = 'ndn-bootstrap'
 copyright = '2022, The ndn-bootstrap authors'
 author = 'Tianyuan Yu'
-
-# The full version, including alpha/beta/rc tags
-release = __version__
 
 
 # -- General configuration ---------------------------------------------------
