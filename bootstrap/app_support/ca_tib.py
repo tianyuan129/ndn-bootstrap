@@ -1,5 +1,5 @@
 from typing import Dict
-from ..ndncert.app.ca import Ca
+from ..ndnauth.deprecate.ca import Ca
 from ndn.app import NDNApp
 from ..tib import Tib
 
