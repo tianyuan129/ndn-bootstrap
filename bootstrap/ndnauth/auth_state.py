@@ -1,19 +1,21 @@
 from .protocol import *
-
-class AuthState(TlvModel):
-    id = BytesField(1)
-    status = UintField(2)
-
-    aes_key = BytesField(3)
-    iv_counter = UintField(4)
-
-    pubkey = BytesField(5)
-
-    auth_type = BytesField(6)
-    auth_id = BytesField(7)
-    auth_cache = BytesField(8)
-
-    auth_key = BytesField(9)
-    auth_value = BytesField(10)
+from abc import abstractmethod
     
+class AuthState(TlvModel):
+    nonce = BytesField(1) # this should be the primary key
     proof_of_possess = BytesField(11)
+    is_memeber = UintField(12)
+    is_authenticated = UintField(13)
+
+class AuthStateUser(AuthState):
+    pub_key = BytesField(3)
+    derived_key = BytesField(4)
+    email = BytesField(5)
+    plaintext_code = BytesField(6)
+    ciphertext_code = EncryptedMessage()
+
+class AuthStateServer(AuthState):
+    common_name = BytesField(8)
+    x509_chain = BytesField(9)
+    rand = BytesField(10)
+    signed_rand = BytesField(11)

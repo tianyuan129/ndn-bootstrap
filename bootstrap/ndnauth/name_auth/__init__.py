@@ -1,6 +1,6 @@
 from .authenticate import Authenticator
-from .authenticate_email import EmailAuthenticator
+from .authenticate_user import UserAuthenticator
 from .member_check import MembershipChecker
-from .member_check_email import EmailMembershipChecker
+from .member_check_user import UserMembershipChecker
 
-__all__ = ['Authenticator', 'EmailAuthenticator', 'MembershipChecker', 'EmailMembershipChecker']
+__all__ = ['Authenticator', 'MembershipChecker', 'UserAuthenticator', 'UserMembershipChecker']

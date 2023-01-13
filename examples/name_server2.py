@@ -5,7 +5,7 @@ from ndn.security import TpmFile, KeychainSqlite3
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, lvs_validator
 
-from bootstrap.ndnauth.app.name_aa import NameAuthAssign
+from bootstrap.ndnauth.app.name_aa import NameAuthAssign2
 from bootstrap.config import get_yaml
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
@@ -19,6 +19,7 @@ basedir = os.path.dirname(os.path.abspath(sys.argv[0]))
 tpm_path = os.path.join(basedir, 'keys/.ndn/ndnsec-key-file')
 pib_path = os.path.join(basedir, 'keys/.ndn/pib.db')
 tpm = TpmFile(tpm_path)
+KeychainSqlite3.initialize(pib_path, 'tpm-file', tpm_path)
 keychain = KeychainSqlite3(pib_path, tpm)
 
 lvs_text = '''
@@ -26,13 +27,10 @@ lvs_text = '''
 #site: "ndn"/"site1"
 #root: #site/#KEY
 #auth_signer: #site/"auth-signer"/#KEY <= #root
-#cert_signer: #site/"cert-signer"/#KEY <= #root
+#BootResponse: #site/"NAA"/"BOOT"/nonce/NOTIFY/_ <= #auth_signer
+#IdProofResponse: #site/"NAA"/"PROOF"/nonce/NOTIFY <= #auth_signer
 #proof_of_possession1: "32=authenticate"/_/_/_/_/#KEY <= #auth_signer
 #proof_of_possession2: "32=authenticate"/_/_/_/#KEY <= #auth_signer
-#NewResponse1: #site/"AA"/"NEW"/_ <= #auth_signer
-#AuthenticateResponse: #site/"AA"/"AUTHENTICATE"/_/_ <= #auth_signer
-#NewResponse2: #site/"CA"/"NEW"/_ <= #cert_signer
-#ChallengeResponse: #site/"CA"/"CHALLENGE"/_/_ <= #cert_signer
 '''
 
 lvs_model = compile_lvs(lvs_text)
@@ -62,10 +60,10 @@ if not checker.check(auth_signer_default_cert.name,
     keychain.import_cert(auth_signer_key.name, auth_signer_cert_name, auth_signer_cert_data)
     auth_signer_key.set_default_cert(auth_signer_cert_name)
 
-config_path = os.path.join(basedir, 'name_server.conf')
+config_path = os.path.join(basedir, 'name_server2.conf')
 config = get_yaml(config_path)
 
-aa = NameAuthAssign(app, config, keychain, checker, lvs_validator(checker, app, cert_data))
+aa = NameAuthAssign2(app, config, keychain, checker, lvs_validator(checker, app, cert_data))
     
 def main () -> int:
     app.run_forever(after_start=aa.register())

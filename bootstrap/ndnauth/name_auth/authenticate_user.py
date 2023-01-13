@@ -4,7 +4,7 @@ import logging, os
 from random import randint
 
 from ..protocol import *
-from ..auth_state import AuthState
+from ..auth_state import AuthStateUser
 from ...crypto_tools import *
 
 import smtplib
@@ -13,10 +13,10 @@ from configparser import ConfigParser
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from .authenticate import Authenticator
+from .authenticate import  Authenticator
+from ...crypto_tools import *
 
-
-class EmailAuthenticator(Authenticator):
+class UserAuthenticator(Authenticator):
     def __init__(self, config: Dict):
         self.config = config
         self.email_sender = lambda email, secret : getattr(__class__, self.config['email_sender'])(self, email, secret)
@@ -69,31 +69,27 @@ class EmailAuthenticator(Authenticator):
         smtp_server.sendmail(msg_from, email, msg.as_string())
         smtp_server.close()
 
-    async def actions_before_authenticate(self, auth_state: AuthState) -> Tuple[AuthState, ErrorMessage]:
-        ret = auth_state
-        email = bytes(ret.auth_id).decode("utf-8")
+    async def after_receive_boot_params(self, auth_state: AuthStateUser) -> Tuple[AuthStateUser, ErrorMessage]:
+        email = bytes(auth_state.email).decode("utf-8")
         PINCODE_SIZE = 6
         secret = ''
         for i in range(PINCODE_SIZE):
             secret += str(randint(0,9))
-        logging.info(f'Secret for Request ID {ret.id.hex()} is {secret}')
-        
+        logging.info(f'Secret for Request ID {auth_state.nonce} is {secret}')
         # self.email_sender(email, secret)
-        ret.auth_key = AUTHENTICATION_EMAIL_PARAMETER_KEY_CODE.encode()
-        # ret.auth_cache = secret.encode()
-        ret.auth_cache = '1234'.encode()
-        ret.status = STATUS_AUTHENTICATION
-        return ret, None
+        auth_state.plaintext_code = '1234'.encode()
+        return auth_state, None
 
-    async def actions_continue_authenticate(self, auth_state: AuthState) -> Tuple[AuthState, ErrorMessage]:
-        ret = auth_state
-        if ret.auth_value == ret.auth_cache:
+    async def after_receive_idproof_params(self, auth_state: AuthStateUser) -> Tuple[AuthStateUser, ErrorMessage]:
+        plaintext_code = get_encrypted_message(auth_state.derived_key, auth_state.nonce.to_bytes(8, 'big'), auth_state.ciphertext_code)
+        if plaintext_code == auth_state.plaintext_code:
             logging.info(f'Identity verification succeed, should issue proof-of-possession')
-            ret.status = STATUS_PENDING
-            return ret, None
+            auth_state.is_authenticated = True
+            return auth_state, None
         else:
+            auth_state.is_authenticated = False
             errs = ErrorMessage()
             errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
             errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
             logging.error('Identity verification failed, returning errors {ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
-            return None, errs
+            return auth_state, errs

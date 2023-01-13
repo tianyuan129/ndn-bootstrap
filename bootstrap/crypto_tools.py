@@ -70,3 +70,15 @@ def get_encrypted_message(aes_key: bytes, associated: bytes, message_in: Encrypt
     cipher = AES.new(aes_key, AES.MODE_GCM, nonce = message_in.iv)
     cipher.update(associated)
     return cipher.decrypt_and_verify(message_in.payload, message_in.tag)
+
+def gen_encrypted_message2(aes_key: bytes, associated: bytes, plaintext: bytes):
+    iv = urandom(12)
+    cipher = AES.new(aes_key, AES.MODE_GCM, nonce = iv)
+    cipher.update(associated)
+    ciphertext, tag = cipher.encrypt_and_digest(plaintext)
+    
+    message_out = EncryptedMessage()
+    message_out.iv = iv
+    message_out.tag = tag
+    message_out.payload = ciphertext
+    return message_out

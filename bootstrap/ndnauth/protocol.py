@@ -1,4 +1,5 @@
-from ndn.encoding import TlvModel, BytesField, UintField, RepeatedField, TypeNumber
+from ndn.encoding import TlvModel, BytesField, UintField, RepeatedField, TypeNumber, ModelField
+from ..crypto_tools import EncryptedMessage
 
 # ApplicationParameters = APPLICATION-PARAMETERS-TYPE TLV-LENGTH
 #                         ecdh-pub
@@ -52,25 +53,6 @@ class NewResponse(TlvModel):
     # optional
     parameter_key = BytesField(TLV_PARAMETER_KEY_TYPE)
     parameter_value = BytesField(TLV_PARAMETER_VALUE_TYPE)
-    
-# encrypted-message = initialization-vector
-#                     authentication-tag
-#                     encrypted-payload
-# initialization-vector = INITIALIZATION-VECTOR-TYPE
-#                         TLV-LENGTH ; == 12
-#                         12OCTET
-# authentication-tag = AUTHENTICATION-TAG-TYPE
-#                      TLV-LENGTH ; == 16
-#                      16OCTET
-# encrypted-payload = ENCRYPTED-PAYLOAD-TYPE TLV-LENGTH *OCTET
-TLV_INITIALIZATION_VECTOR_TYPE = 157
-TLV_AUTHENTICATION_TAG_TYPE = 175
-TLV_ENCRYPTED_PAYLOAD_TYPE = 159
-
-class EncryptedMessage(TlvModel):
-    iv = BytesField(TLV_INITIALIZATION_VECTOR_TYPE)
-    tag = BytesField(TLV_AUTHENTICATION_TAG_TYPE)
-    payload = BytesField(TLV_ENCRYPTED_PAYLOAD_TYPE)
 
 # ApplicationParameters = APPLICATION-PARAMETERS-TYPE TLV-LENGTH encrypted-message
 
@@ -113,6 +95,49 @@ class AuthenticateResponse(TlvModel):
     # optional
     parameter_key = BytesField(TLV_PARAMETER_KEY_TYPE)
     parameter_value = BytesField(TLV_PARAMETER_VALUE_TYPE)
+
+
+
+TLV_LOCAL_PREFIX_TYPE = 129
+TLV_LOCAL_FORWARDER_TYPE = 131
+class ConnectvityInfo(TlvModel):
+    local_prefix = BytesField(TLV_LOCAL_PREFIX_TYPE)
+    local_forwarder = BytesField(TLV_LOCAL_FORWARDER_TYPE)
+    
+TLV_ECDB_PUB_TYPE = 133
+TLV_EMAIL_ADDRESS_TYPE = 135
+TLV_CERT_REQUEST_TYPE = 137
+class BootParamsResponseUserInner(TlvModel):
+    ecdh_pub = BytesField(TLV_ECDB_PUB_TYPE)
+    email = BytesField(TLV_EMAIL_ADDRESS_TYPE)
+    cert_request = BytesField(TLV_CERT_REQUEST_TYPE)
+
+TLV_BOOT_PARAMS_RES_USER_TYPE = 201
+class BootParamsResponseUser(TlvModel):
+    inner = ModelField(TLV_BOOT_PARAMS_RES_USER_TYPE, BootParamsResponseUserInner)
+
+TLV_SALT_TYPE = 141
+class BootResponseUser(TlvModel):
+    ecdh_pub = BytesField(TLV_ECDB_PUB_TYPE)
+    salt = BytesField(TLV_SALT_TYPE)
+
+TLV_ENCRYPTED_CODE_TYPE = 145
+class IdProofParamsUser(TlvModel):
+    encrypted_code = ModelField(TLV_ENCRYPTED_CODE_TYPE, EncryptedMessage)
+
+TLV_PROOF_OF_POSSESSION_TYPE = 147
+class IdProofResponse(TlvModel):
+    proof_of_possess = BytesField(TLV_PROOF_OF_POSSESSION_TYPE)
+
+
+
+
+
+
+
+
+
+
 
 TLV_ERROR_CODE = 171
 TLV_ERROR_INFO = 173

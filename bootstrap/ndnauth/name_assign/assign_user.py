@@ -2,8 +2,9 @@ from typing import Dict
 from ndn.encoding import Name, FormalName, Component
 
 from .assign import NameAssigner
+from ..auth_state import *
 
-class EmailNameAssigner(NameAssigner): 
+class UserNameAssigner(NameAssigner): 
     def __init__(self, config: Dict):
         self.config = config
 
@@ -27,5 +28,5 @@ class EmailNameAssigner(NameAssigner):
         splitted.reverse()
         return splitted
     
-    def assign(self, auth_id: str) -> FormalName:
-        return getattr(__class__, self.config)(self, auth_id)
+    def assign(self, auth_state: AuthStateUser) -> FormalName:
+        return getattr(__class__, self.config)(self, bytes(auth_state.email).decode('utf-8'))

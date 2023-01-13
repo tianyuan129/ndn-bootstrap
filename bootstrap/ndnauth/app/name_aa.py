@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 
 from ndn.app import NDNApp, Validator
-from ndn.encoding import Name, InterestParam, BinaryStr, FormalName, Component
+from ndn.encoding import Name, InterestParam, BinaryStr, FormalName, Component, parse_tl_num
 from ndn.app_support.security_v2 import parse_certificate, KEY_COMPONENT, derive_cert
 from ndn.app_support.keychain_register import attach_keychain_register
 from ndn.app_support.light_versec import Checker
@@ -16,18 +16,20 @@ from ..protocol import *
 from ...crypto_tools import *
 from ..name_auth import *
 from ..name_assign import *
-from ..auth_state import AuthState
+from ..auth_state import *
+from ..mode_encoder import *
 from ...keychain_register import attach_keychain_register_appv1
+_POSITION_NONCE_IN_BOOT_NOTIFICATION = -3
+_POSITION_NONCE_IN_PROOF_NOTIFICATION = -2
 
-class NameAuthAssign(object):
+class NameAuthAssign2(object):
     def __init__(self, app: NDNApp, config: Dict, keychain: KeychainSqlite3,
                  checker: Checker, validator: Validator):
         #todo: customize the storage type
-        self.requests = {}
-        self.cache = {}
+        self.entities_cache = {}
+        self.entities_storage = {}
         self.config = config
         self.aa_prefix = self.config['prefix_config']['prefix_name']
-        # self.tib = tib
         self.keychain = keychain
         self.checker = checker
         self.data_validator = validator
@@ -60,19 +62,19 @@ class NameAuthAssign(object):
             membership_checker_type = getattr(sys.modules[__name__], checker_type_str)
             membership_checker = object.__new__(membership_checker_type, config_section['membership_checker'])
             membership_checker.__init__(config_section['membership_checker'])
-            self.membership_checkers[auth_type] = membership_checker
+            self.membership_checkers[auth_type.capitalize()] = membership_checker
             
             authenticator_type_str = auth_type.capitalize() + 'Authenticator'
             authenticator_type = getattr(sys.modules[__name__], authenticator_type_str)
             authenticator = object.__new__(authenticator_type, config_section['authenticator'])
             authenticator.__init__(config_section['authenticator'])
-            self.authenticators[auth_type] = authenticator
+            self.authenticators[auth_type.capitalize()] = authenticator
 
             name_assigner_type_str = auth_type.capitalize() + 'NameAssigner'
             name_assigner_type = getattr(sys.modules[__name__], name_assigner_type_str)
             name_assigner = object.__new__(name_assigner_type, config_section['name_assigner'])
             name_assigner.__init__(config_section['name_assigner'])
-            self.name_assigners[auth_type] = name_assigner
+            self.name_assigners[auth_type.capitalize()] = name_assigner
 
     def _get_signer(self, name):
         suggested_keylocator = self.checker.suggest(name, self.keychain)
@@ -81,136 +83,105 @@ class NameAuthAssign(object):
             return None
         else:
             return self.keychain.tpm.get_signer(suggested_keylocator[:-2], suggested_keylocator)
+
+    async def on_boot_notification(self, name, _app_param):
+        nonce = Component.to_number(name[_POSITION_NONCE_IN_BOOT_NOTIFICATION])
+        logging.debug(f'Received Nonce: {nonce}')
+        connect_info = ConnectvityInfo.parse(_app_param)
         
-    async def on_new_interest(self, name: FormalName, _app_param: Optional[BinaryStr]):
-        logging.debug(f'>> I: {Name.to_str(name)}')
-        request = NewRequest.parse(_app_param)
-        ecdh = ECDH()
-        auth_state = AuthState()
-        response = NewResponse()
+        local_prefix_str = Name.to_str(Name.from_bytes(connect_info.local_prefix))
+        local_forwarder_str = ''
+        if connect_info.local_forwarder is not None:
+            local_forwarder_str = Name.to_str(Name.from_bytes(connect_info.local_forwarder))
 
-        # extracting fields
-        id = urandom(8)
-        salt = urandom(32)
-        pub = request.ecdh_pub
-        pubkey = request.pubkey
-        auth_type = bytes(request.auth_type).decode('utf-8')
-        auth_id = bytes(request.auth_id).decode('utf-8')
-
-        # if authentication type not available
-        if not auth_type in self.config['auth_config']:
-            logging.error(f'Authentication type not available')
-            errs = ErrorMessage()
-            errs.code = ERROR_INVALID_PARAMTERS[0]
-            errs.info = ERROR_INVALID_PARAMTERS[1].encode()
-            self.app.put_data(name, errs.encode(), freshness_period = 10000, signer = self._get_signer(name))
-            return
-        membership_checker = self.membership_checkers[auth_type]
-        allowed = await membership_checker.check(auth_id)
+        self.entities_cache[nonce] = {'connect_info': [local_prefix_str, local_forwarder_str]}
+        logging.debug(f'ConnectInfo: LocalPrefix {local_prefix_str}, LocalForwarder {local_forwarder_str}')
+        # /<local-prefix>/NAA/BOOT/<nonce>/MSG
+        boot_params_name = Name.from_str(local_prefix_str + '/NAA/BOOT') \
+            + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
+        interest_param = InterestParam()
+        interest_param.forwarding_hint = [connect_info.local_forwarder]
+        data_name, _, content = await self.app.express_interest(
+            boot_params_name,  must_be_fresh=True, can_be_prefix=False, lifetime=6000)
+        
+        # find specific encoder
+        tlv_type, _ = parse_tl_num(content)
+        encoder_type_str = find_encoder(tlv_type)
+        encoder_type = getattr(sys.modules[__name__], encoder_type_str)
+        encoder = object.__new__(encoder_type, nonce)
+        encoder.__init__(nonce)
+        self.entities_cache[nonce] |= {'encoder': encoder, 'encoder_type': encoder_type_str}
+        
+        # parsing boot params and preparing response
+        encoder.parse_boot_params(content)
+        
+        auth_type_str = encoder_type_str[:encoder_type_str.find('ModeEncoder')]
+        membership_checker = self.membership_checkers[auth_type_str]
+        allowed = await membership_checker.check(encoder.auth_state)
         if not allowed:
             logging.error(f'Authentication id permission denied')
             errs = ErrorMessage()
             errs.code = ERROR_INVALID_PARAMTERS[0]
             errs.info = ERROR_INVALID_PARAMTERS[1].encode()
-            self.app.put_data(name, errs.encode(), freshness_period = 10000,
-                                signer = self._get_signer(name))
             return
+    
+        authenticator = self.authenticators[auth_type_str]
+        encoder.auth_state, err = await authenticator.after_receive_boot_params(encoder.auth_state)
+        self.app.put_data(name, content=encoder.prepare_boot_response(), freshness_period = 10000, signer = self._get_signer(name))
+        self.entities_storage[nonce] = encoder.auth_state
+        return
+
+    async def on_idproof_notification(self, name, _app_param):
+        nonce = Component.to_number(name[_POSITION_NONCE_IN_PROOF_NOTIFICATION])
+        logging.debug(f'Received Nonce: {nonce}')
+        connect_info = self.entities_cache[nonce]['connect_info']
+        encoder = self.entities_cache[nonce]['encoder']
+        encoder_type_str = self.entities_cache[nonce]['encoder_type']
+        local_prefix_str = connect_info[0]
+        local_forwarder_str = connect_info[1]
+
+        logging.debug(f'ConnectInfo: LocalPrefix {local_prefix_str}, LocalForwarder {local_forwarder_str}')
+        # /<local-prefix>/NAA/BOOT/<nonce>/MSG
+        idproof_params_name = Name.from_str(local_prefix_str + '/NAA/PROOF') \
+            + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
+        interest_param = InterestParam()
         
-        import base64
-        logging.info(f'Received PubKey: {base64.b64encode(pubkey)}')
-        # generating new authentication state
-        ecdh.encrypt(bytes(pub), salt, id)
-        auth_state.aes_key = ecdh.derived_key
-        auth_state.status = STATUS_BEFORE_AUTHENTICATION
-        auth_state.id = id
-        auth_state.pubkey = pubkey
-        auth_state.auth_type = auth_type
-        auth_state.auth_id = request.auth_id
-        self.requests[id] = auth_state
-        logging.info(f'Request ID: {id.hex()}')
-    
-        authenticator = self.authenticators[auth_type]
-        auth_state_ret, err = await authenticator.actions_before_authenticate(auth_state)
-        if err is not None:
-            self.app.put_data(name, err.encode(), freshness_period = 10000, signer = self._get_signer(name))
-            return
-        else:
-            self.requests[id] = auth_state_ret
-            response.ecdh_pub = ecdh.pub_key_encoded
-            response.salt = salt
-            response.request_id = id
-            response.parameter_key = auth_state.auth_key
-            self.app.put_data(name, response.encode(), freshness_period = 10000, signer = self._get_signer(name))
-
-    async def on_authenticate_interest(self, name: FormalName, _app_param: Optional[BinaryStr]):
-        logging.debug(f'>> I: {Name.to_str(name)}')
-        message_in = EncryptedMessage.parse(_app_param)
-        request_id = name[len(Name.from_str(self.aa_prefix)) + 2][-8:]
-
-        try:
-            self.requests[request_id]
-        except KeyError:
-            logging.error(f'No AuthState for Request ID: {request_id.hex()}')
-            return
-        auth_state = self.requests[request_id]
-        response = AuthenticateResponse()
-
-        # checking iv counters
-        payload = get_encrypted_message(bytes(auth_state.aes_key), bytes(auth_state.id), message_in)
-        request = AuthenticateRequest.parse(payload)
-        if request.parameter_key == auth_state.auth_key:
-            auth_state.auth_value = request.parameter_value
-            authenticator = self.authenticators[auth_state.auth_type]
-            auth_state_ret, err = await authenticator.actions_continue_authenticate(auth_state)
-            if err is not None:
-                self.app.put_data(name, err.encode(), freshness_period = 10000, signer = self._get_signer(name))
-                return
-    
-            name_assigner = self.name_assigners[auth_state_ret.auth_type]
-            auth_id_str = bytes(auth_state_ret.auth_id).decode('utf-8')
-            assigned_name = name_assigner.assign(auth_id_str)
-
-            key_id = Component.from_bytes(auth_state_ret.id)
+        if len(local_forwarder_str) > 0:
+            interest_param.forwarding_hint = [Name.from_str(local_forwarder_str)]
+        data_name, _, content = await self.app.express_interest(
+            idproof_params_name,  must_be_fresh=True, can_be_prefix=False, lifetime=6000)
+        
+        encoder.parse_idproof_params(content)
+        # another string processing
+        auth_type_str = encoder_type_str[:encoder_type_str.find('ModeEncoder')]
+        authenticator = self.authenticators[auth_type_str]
+        encoder.auth_state, err = await authenticator.after_receive_idproof_params(encoder.auth_state)
+        
+        if encoder.auth_state.is_authenticated and err is None:
+            # assign name
+            name_assigner = self.name_assigners[auth_type_str]
+            assigned_name = name_assigner.assign(encoder.auth_state)
+            key_id = Component.from_bytes(encoder.auth_state.nonce.to_bytes(8, 'big'))
             proof_of_possess_idname = [Component.from_str('32=authenticate')] + assigned_name
             proof_of_possess_keyname = proof_of_possess_idname + [KEY_COMPONENT, key_id]
             proof_of_possess_name_mocked = proof_of_possess_keyname + Name.from_str('/NA/v=0')
             proof_of_possess_name, proof_of_possess = \
                 derive_cert(proof_of_possess_keyname, 'NA',
-                            auth_state_ret.pubkey,
+                            encoder.auth_state.pub_key,
                             self._get_signer(proof_of_possess_name_mocked),
                             datetime.utcnow(), 10000)
+            logging.debug(f'Generating PoP {Name.to_str(proof_of_possess_name)}')
+            self.app.put_data(name, content=encoder.prepare_idproof_response(proof_of_possess = proof_of_possess),
+                            freshness_period = 10000, signer = self._get_signer(name))
+            self.entities_storage[nonce] = encoder.auth_state
 
-            logging.info(f'Proof-of-Possession Name: {Name.to_str(proof_of_possess_name)}')
-            auth_state_ret.proof_of_possess = proof_of_possess
-            auth_state_ret.status = STATUS_SUCCESS
-            self.requests[request_id] = auth_state_ret
-
-            response.status = auth_state_ret.status
-            response.proof_of_possess = auth_state_ret.proof_of_possess
-            plaintext = response.encode()
-            
-            try:
-                message_out, auth_state_ret.iv_random, auth_state_ret.iv_counter =\
-                    gen_encrypted_message(bytes(auth_state.aes_key), bytes(auth_state.id), 
-                    plaintext, auth_state_ret.iv_random, auth_state_ret.iv_counter)
-            except:
-                message_out, auth_state_ret.iv_random, auth_state_ret.iv_counter =\
-                    gen_encrypted_message(bytes(auth_state.aes_key), bytes(auth_state.id), 
-                    plaintext, None, None)                
-
-            self.requests[request_id] = auth_state_ret
-            self.app.put_data(name, message_out.encode(), freshness_period = 10000, signer = self._get_signer(name))
-
-    def register(self):
-        logging.debug(f'Registers for {Name.to_str(self.aa_prefix + "/AA")}')
-        
-        @self.app.route(self.aa_prefix + '/AA')
-        def _on_interest(name: FormalName, _params: InterestParam, _app_param: Optional[BinaryStr] | None):
+    async def register(self):
+        @self.app.route(self.aa_prefix + '/NAA')
+        def _on_notification(name: FormalName, _params: InterestParam, _app_param: Optional[BinaryStr] | None):
             # dispatch to corresponding handlers
-            if Name.is_prefix(self.aa_prefix + '/AA/NEW', name):
-                asyncio.create_task(self.on_new_interest(name, _app_param))
+            if Name.is_prefix(self.aa_prefix + '/NAA/BOOT', name):
+                asyncio.create_task(self.on_boot_notification(name, _app_param))
                 return
-            if Name.is_prefix(self.aa_prefix + '/AA/AUTHENTICATE', name):
-                asyncio.create_task(self.on_authenticate_interest(name, _app_param))
+            if Name.is_prefix(self.aa_prefix + '/NAA/PROOF', name):
+                asyncio.create_task(self.on_idproof_notification(name, _app_param))
                 return
-            

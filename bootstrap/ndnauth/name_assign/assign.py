@@ -2,6 +2,7 @@ from typing import Dict
 from abc import abstractmethod
 
 from ..protocol import *
+from ..auth_state import *
 
 from ndn.encoding import FormalName
 
@@ -10,5 +11,5 @@ class NameAssigner(object):
         pass
         
     @abstractmethod
-    def assign(self, auth_id: str) -> FormalName:
+    def assign(self, auth_state: AuthState) -> FormalName:
         pass

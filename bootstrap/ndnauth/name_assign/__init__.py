@@ -1,4 +1,4 @@
 from .assign import NameAssigner
-from .assign_email import EmailNameAssigner
+from .assign_user import UserNameAssigner
 
-__all__ = ['NameAssigner', 'EmailNameAssigner']
+__all__ = ['NameAssigner', 'UserNameAssigner']
