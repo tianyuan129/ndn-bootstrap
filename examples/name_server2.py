@@ -5,7 +5,7 @@ from ndn.security import TpmFile, KeychainSqlite3
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
 from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, lvs_validator
 
-from bootstrap.ndnauth.app.name_aa import NameAuthAssign2
+from bootstrap.ndnauth.app.name_aa import NameAuthAssign
 from bootstrap.config import get_yaml
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
@@ -63,7 +63,7 @@ if not checker.check(auth_signer_default_cert.name,
 config_path = os.path.join(basedir, 'name_server2.conf')
 config = get_yaml(config_path)
 
-aa = NameAuthAssign2(app, config, keychain, checker, lvs_validator(checker, app, cert_data))
+aa = NameAuthAssign(app, config, keychain, checker, lvs_validator(checker, app, cert_data))
     
 def main () -> int:
     app.run_forever(after_start=aa.register())

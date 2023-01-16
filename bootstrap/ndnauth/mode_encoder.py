@@ -19,16 +19,16 @@ class ModeEncoder(object):
     def boot_params_dec(self, data_name, content) -> AuthState:
         pass
     @abstractmethod
-    def parse_boot_params(self, content):
+    def parse_boot_params(self, content) -> bytes | None:
         pass
     @abstractmethod
-    def prepare_boot_params(self, **kwargs):
+    def prepare_boot_params(self, **kwargs) -> bytes:
         pass
     @abstractmethod
-    def parse_boot_response(self, content):
+    def parse_boot_response(self, content) -> bytes | None:
         pass
     abstractmethod
-    def prepare_boot_response(self):
+    def prepare_boot_response(self) -> bytes:
         pass
     @abstractmethod
     def prepare_idproof_params(self, **kwargs):
@@ -37,10 +37,10 @@ class ModeEncoder(object):
     def prepare_idproof_response(self, **kwargs):
         pass
     @abstractmethod
-    def parse_idproof_params(self, content):
+    def parse_idproof_params(self, content) -> bytes | None:
         pass
     @abstractmethod
-    def parse_idproof_response(self, content):
+    def parse_idproof_response(self, content) -> bytes | None:
         pass
 
 class UserModeEncoder(ModeEncoder):
@@ -84,7 +84,6 @@ class UserModeEncoder(ModeEncoder):
                           self.auth_state.nonce.to_bytes(8, 'big'))
         from base64 import b64encode
         logging.debug(f'Shared Secret: {b64encode(self.ecdh.derived_key)}')
-        return self.auth_state
 
     def prepare_boot_response(self):
         boot_response = BootResponseUser()
@@ -97,7 +96,7 @@ class UserModeEncoder(ModeEncoder):
         encrypted_message = \
             gen_encrypted_message2(bytes(self.ecdh.derived_key), 
                                    self.auth_state.nonce.to_bytes(8, 'big'),
-                                   kwargs['code'].encode())
+                                   kwargs['proof'].encode())
         idproof_params.encrypted_code = encrypted_message
         return idproof_params.encode()
 
@@ -113,5 +112,4 @@ class UserModeEncoder(ModeEncoder):
     def parse_idproof_response(self, content):
         idproof_response = IdProofResponse.parse(content)
         self.auth_state.proof_of_possess = idproof_response.proof_of_possess
-        return self.auth_state
     

@@ -5,7 +5,7 @@ from ndn.security import TpmFile, KeychainSqlite3, Sha256WithEcdsaSigner
 from ndn.app_support.security_v2 import parse_certificate
 from ndn.app_support.light_versec import Checker, compile_lvs, DEFAULT_USER_FNS, lvs_validator
 
-from bootstrap.ndnauth.app.name_client import NameRequster2
+from bootstrap.ndnauth.app.name_client import NameRequster
 from bootstrap.config import get_yaml
 from Cryptodome.PublicKey import ECC
 
@@ -46,12 +46,12 @@ lvs_text = '''
 '''
 lvs_model = compile_lvs(lvs_text)
 checker = Checker(lvs_model, DEFAULT_USER_FNS)
-requester = NameRequster2(app, lvs_validator(checker, app, trust_anchor_data))
+requester = NameRequster(app, lvs_validator(checker, app, trust_anchor_data))
 keyname = ''
 async def run():
     # get authentication, and pop    
-    pop = await requester.authenticate('/ndn/site1', '/alice', None, 'tianyuan@cs.ucla.edu',
-        lambda _ : '1234'.encode()
+    pop = await requester.authenticate_user('/ndn/site1', '/alice', None,
+        'tianyuan@cs.ucla.edu', lambda _ : '1234'
     )
     pop_data = parse_certificate(pop)
     logging.debug(f'Receiving Pop {Name.to_str(pop_data.name)}')

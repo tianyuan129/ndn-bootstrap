@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Coroutine
 
-import logging, sys
+import logging, sys, time
 from os import urandom
 import asyncio
 from datetime import datetime
@@ -22,7 +22,7 @@ from ...keychain_register import attach_keychain_register_appv1
 _POSITION_NONCE_IN_BOOT_NOTIFICATION = -3
 _POSITION_NONCE_IN_PROOF_NOTIFICATION = -2
 
-class NameAuthAssign2(object):
+class NameAuthAssign(object):
     def __init__(self, app: NDNApp, config: Dict, keychain: KeychainSqlite3,
                  checker: Checker, validator: Validator):
         #todo: customize the storage type
@@ -101,6 +101,7 @@ class NameAuthAssign2(object):
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
         interest_param = InterestParam()
         interest_param.forwarding_hint = [connect_info.local_forwarder]
+        time.sleep(0.01)
         data_name, _, content = await self.app.express_interest(
             boot_params_name,  must_be_fresh=True, can_be_prefix=False, lifetime=6000)
         
@@ -145,7 +146,8 @@ class NameAuthAssign2(object):
         idproof_params_name = Name.from_str(local_prefix_str + '/NAA/PROOF') \
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
         interest_param = InterestParam()
-        
+        time.sleep(0.01)
+                
         if len(local_forwarder_str) > 0:
             interest_param.forwarding_hint = [Name.from_str(local_forwarder_str)]
         data_name, _, content = await self.app.express_interest(

@@ -5,7 +5,7 @@ GetSigner = Callable[[NonStrictName], Signer]
 
 Selector = Callable[[List[bytes]], Tuple[bytes, bytes, bytes]]
 
-Prover = Callable[[bytes, bytes, bytes], Tuple[bytes, bytes]]
+Prover = Callable[[Any], bytes]
 
 class InvalidName(Exception):
     """
