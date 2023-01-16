@@ -57,8 +57,9 @@ async def run():
         'tianyuan@cs.ucla.edu', lambda _ : '1234'
     )
     pop_data = parse_certificate(pop)
-    logging.debug(f'Receiving Pop {Name.to_str(pop_data.name)}')
+    logging.debug(f'Receiving PoP {Name.to_str(pop_data.name)}')
     # save the name-key binding
+    logging.debug(f'Saving authentication key {Name.to_str(pop_data.name[:-2])} to TPM')
     tpm.save_key(pop_data.name[:-2], prvkey_der)
     max_width = 70
     from base64 import b64encode
@@ -70,10 +71,10 @@ async def run():
         for i in range(0, lines_needed):
             line = pop_str[i * max_width : (i + 1) * max_width]  + '\n'
             pop_file.write(line)
-    tpm.delete_key(pop_data.name[:-2])
+    # tpm.delete_key(pop_data.name[:-2])
 
-    # x509_chain_file = open('fullchain.pem')
-    # x509_prvkey_file = open('privkey.pem')
+    # x509_chain_file = open('examples/alice-ndn-cert.pem')
+    # x509_prvkey_file = open('examples/alice-ndn-privkey.pem')
     # pop = await requester.authenticate_server('/ndn/site1', '/alice', None,
     #     bytes(x509_chain_file.read(), 'utf-8'),
     #     bytes(x509_prvkey_file.read(), 'utf-8')
@@ -81,6 +82,7 @@ async def run():
     # x509_chain_file.close()
     # x509_prvkey_file.close()
 
+    app.shutdown()
 def main () -> int:
     app.run_forever(after_start=run())
 if __name__ == "__main__":

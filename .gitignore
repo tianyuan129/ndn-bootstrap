@@ -120,3 +120,4 @@ checkpoint
 .pytest_cache
 
 *.bundle
+*.pop

@@ -37,12 +37,13 @@ with open(filename, 'r') as pop_file:
 pop_wire = b64decode(pop_str)
 assigned_keyname = parse_certificate(pop_wire).name[:-2]
 assigned_name = assigned_keyname[1:-2]
-logging.info(f'get assigned name {Name.to_str(assigned_name)} from pop')
+logging.info(f'Get assigned name {Name.to_str(assigned_name)} from PoP')
 
 # prepare keychain
 try:
     csr_data = keychain[assigned_name].default_key().default_cert().data
 except:
+    logging.info(f'Creating new Identity under assigned name {Name.to_str(assigned_name)}')
     keychain.touch_identity(assigned_name)
     csr_data = keychain[assigned_name].default_key().default_cert().data
 csr_name = parse_certificate(csr_data).name
@@ -53,8 +54,10 @@ lvs_text = '''
 #root: #site/#KEY
 #auth_signer: #site/"auth-signer"/#KEY <= #root
 #cert_signer: #site/"cert-signer"/#KEY <= #root
-#proof_of_possession1: "32=authenticate"/_/_/_/_/#KEY <= #cert_signer
-#proof_of_possession2: "32=authenticate"/_/_/_/#KEY <= #cert_signer
+#proof_of_possession1: "32=authenticate"/_/_/_/_/#KEY <= #auth_signer
+#proof_of_possession2: "32=authenticate"/_/_/_/#KEY <= #auth_signer
+#proof_of_possession3: "32=authenticate"/_/_/#KEY <= #auth_signer
+#proof_of_possession4: "32=authenticate"/_/#KEY <= #auth_signer
 #NewResponse1: #site/"AA"/"NEW"/_ <= #cert_signer
 #AuthenticateResponse: #site/"AA"/"AUTHENTICATE"/_/_ <= #cert_signer
 #NewResponse2: #site/"CA"/"NEW"/_ <= #cert_signer
@@ -90,7 +93,11 @@ async def run():
     _, _, _, issued_cert = await app.express_interest(issued_cert_name, validator=data_validator,
                                                       interest_param=interest_param,
                                                       need_raw_packet=True)
+    logging.debug(f'Loading issued certificate {Name.to_str(issued_cert_name)} to Keychain')
     keychain.import_cert(issued_cert_name[:-2], issued_cert_name, issued_cert)
+    logging.debug(f'Deleting authentication key {Name.to_str(assigned_keyname)} from TPM')
+    tpm.delete_key(assigned_keyname)
+    app.shutdown()
                 
 def main () -> int:
     app.run_forever(after_start=run())

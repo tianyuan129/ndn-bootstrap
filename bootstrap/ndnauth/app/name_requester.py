@@ -47,7 +47,8 @@ class NameRequster(object):
             connect_info.local_forwarder = Name.to_bytes(Name.from_str(local_forwarder))
         data_name, _, content = await self.app.express_interest(
             interest_name, app_param = connect_info.encode(), must_be_fresh=True, 
-            can_be_prefix=False, lifetime=6000)
+            can_be_prefix=False, lifetime=6000,
+            validator=self.data_validator)
         # /<controller-prefix>/NAA/BOOT/<nonce>/NOTIFY/<ParametersSha256Digest>
         # boot response may contain useful information for idproof
         boot_parse_ret = encoder.parse_boot_response(content)
@@ -64,7 +65,8 @@ class NameRequster(object):
         interest_name = Name.from_str(controller_prefix + '/NAA/PROOF') \
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('NOTIFY')]
         data_name, _, content = await self.app.express_interest(
-            interest_name, must_be_fresh=True, can_be_prefix=False, lifetime=6000)
+            interest_name, must_be_fresh=True, can_be_prefix=False, lifetime=6000,
+            validator=self.data_validator)
         # /<controller-prefix>/NAA/BOOT/<nonce>/NOTIFY/<ParametersSha256Digest>
         logging.debug(f'Receiving Data {Name.to_str(data_name)}')
         encoder.parse_idproof_response(content)

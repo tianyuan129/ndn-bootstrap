@@ -29,6 +29,8 @@ lvs_text = '''
 #cert_signer: #site/"cert-signer"/#KEY <= #root
 #proof_of_possession1: "32=authenticate"/_/_/_/_/#KEY <= #auth_signer
 #proof_of_possession2: "32=authenticate"/_/_/_/#KEY <= #auth_signer
+#proof_of_possession3: "32=authenticate"/_/_/#KEY <= #auth_signer
+#proof_of_possession4: "32=authenticate"/_/#KEY <= #auth_signer
 #NewResponse1: #site/"AA"/"NEW"/_ <= #auth_signer
 #AuthenticateResponse: #site/"AA"/"AUTHENTICATE"/_/_ <= #auth_signer
 #NewResponse2: #site/"CA"/"NEW"/_ <= #cert_signer

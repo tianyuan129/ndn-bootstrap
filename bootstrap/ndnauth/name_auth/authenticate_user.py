@@ -69,7 +69,7 @@ class UserAuthenticator(Authenticator):
         smtp_server.sendmail(msg_from, email, msg.as_string())
         smtp_server.close()
 
-    async def after_receive_boot_params(self, auth_state: AuthStateUser) -> Tuple[AuthStateUser, ErrorMessage]:
+    async def after_receive_boot_params(self, auth_state: AuthStateUser) -> AuthStateUser:
         email = bytes(auth_state.email).decode("utf-8")
         PINCODE_SIZE = 6
         secret = ''
@@ -78,18 +78,18 @@ class UserAuthenticator(Authenticator):
         logging.info(f'Secret for Request ID {auth_state.nonce} is {secret}')
         # self.email_sender(email, secret)
         auth_state.plaintext_code = '1234'.encode()
-        return auth_state, None
+        return auth_state
 
-    async def after_receive_idproof_params(self, auth_state: AuthStateUser) -> Tuple[AuthStateUser, ErrorMessage]:
+    async def after_receive_idproof_params(self, auth_state: AuthStateUser) -> AuthStateUser:
         plaintext_code = get_encrypted_message(auth_state.derived_key, auth_state.nonce.to_bytes(8, 'big'), auth_state.ciphertext_code)
         if plaintext_code == auth_state.plaintext_code:
             logging.info(f'Identity verification succeed, should issue proof-of-possession')
             auth_state.is_authenticated = True
-            return auth_state, None
+            return auth_state
         else:
             auth_state.is_authenticated = False
             errs = ErrorMessage()
-            errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
-            errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
+            errs.code = ERROR_BAD_SIGNATURE_VALUE_OR_INFO[0]
+            errs.info = ERROR_BAD_SIGNATURE_VALUE_OR_INFO[1].encode()
             logging.error('Identity verification failed, returning errors {ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
-            return auth_state, errs
+            return auth_state

@@ -151,35 +151,9 @@ TLV_ERROR_INFO = 173
 class ErrorMessage(TlvModel):
     code = UintField(TLV_ERROR_CODE)
     info = BytesField(TLV_ERROR_INFO)
-
-# 0: STATUS_BEFORE_AUTHENTICATION, the requester has not selected a AUTHENTICATION.
-# 1: STATUS_AUTHENTICATION, the AUTHENTICATION is in progress.
-# 2: STATUS_PENDING, the AUTHENTICATION is finished, but not yet approved by the CA.
-# 3: STATUS_SUCCESS, the AUTHENTICATION is finished, and the CA has approved the result.
-# 4: STATUS_FAILURE, the AUTHENTICATION has failed.
-STATUS_BEFORE_AUTHENTICATION = 0
-STATUS_AUTHENTICATION = 1
-STATUS_PENDING = 2
-STATUS_SUCCESS = 3
-STATUS_FAILURE = 4
-
-
-AUTHENTICATION_STATUS_NEED_CODE = "need-code";
-AUTHENTICATION_STATUS_WRONG_CODE = "wrong-code";
-AUTHENTICATION_EMAIL_PARAMETER_KEY_EMAIL = "email";
-AUTHENTICATION_EMAIL_PARAMETER_KEY_CODE = "code";
-
-AUTHENTICATION_STATUS_NEED_PROOF = "need-proof";
-AUTHENTICATION_POSS_PARAMETER_KEY_ISSUEDCERT = "issued-cert";
-AUTHENTICATION_POSS_PARAMETER_KEY_NONCE = "nonce";
-AUTHENTICATION_POSS_PARAMETER_KEY_PROOF = "proof";
-
-ERROR_BAD_INTEREST_FORMAT = [1, 'BAD_INTEREST_FORMAT']
-ERROR_BAD_PARAMETER_FORMAT = [2, 'BAD_PARAMETER_FORMAT']
-ERROR_BAD_SIGNATURE_VALUE_OR_INFO = [3, 'BAD_SIGNATURE_VALUE_OR_INFO']
-ERROR_INVALID_PARAMTERS = [4, 'INVALID_PARAMTERS']
-ERROR_NAME_NOT_ALLOWED = [5, 'NAME_NOT_ALLOWED']
-ERROR_BAD_VALIDITY_PERIOD = [6, 'BAD_VALIDITY_PERIOD']
-ERROR_BAD_RAN_OUT_OF_TRIES = [7, 'BAD_RAN_OUT_OF_TRIES']
-ERROR_BAD_RAN_OUT_OF_TIMES = [8, 'BAD_RAN_OUT_OF_TRIES']
-# ERROR_NOT_AVAILABLE_NAMES = [9, 'NOT_AVAILABLE_NAMES']
+ERROR_BAD_INTEREST_FORMAT = [1, 'Bad Interest Format: the Interest format is incorrect, e.g., no ApplicationParameters.']
+ERROR_BAD_PARAMETER_FORMAT = [2, 'Bad Interest Parameter Format: the ApplicationParameters field is not correctly formed.']
+ERROR_BAD_SIGNATURE_VALUE_OR_INFO = [3, 'Bad Signature or signature info: the Interest carries an invalid signature.']
+ERROR_BAD_RESPONSE_FORMAT = [4, 'Bad Response Format: Bootstrapping Parameters Response or Identity Proof Parameter Response is not correctly formed.']
+ERROR_IDENTITY_NOT_ALLOWED = [5, 'Identity not allowed: the provided email address or X.509 common name is not allowed by controller.']
+ERROR_BAD_IDENTITY_PROOF = [6, 'Bad Identity Proof: provided identity proof parameter cannot be verified, e.g., wrong email verification code.']

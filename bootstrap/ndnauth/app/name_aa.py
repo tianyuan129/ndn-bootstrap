@@ -83,10 +83,20 @@ class NameAuthAssign(object):
         else:
             return self.keychain.tpm.get_signer(suggested_keylocator[:-2], suggested_keylocator)
 
+    def _return_err_msg(self, name, err):
+        self.app.put_data(name, content=err.encode(), freshness_period = 10000, signer = self._get_signer(name))
+
     async def on_boot_notification(self, name, _app_param):
         nonce = Component.to_number(name[_POSITION_NONCE_IN_BOOT_NOTIFICATION])
         logging.debug(f'Received Nonce: {nonce}')
-        connect_info = ConnectvityInfo.parse(_app_param)
+        try:
+            connect_info = ConnectvityInfo.parse(_app_param)
+        except:
+            errs = ErrorMessage()
+            errs.code = ERROR_BAD_PARAMETER_FORMAT[0]
+            errs.info = ERROR_BAD_PARAMETER_FORMAT[1].encode()
+            self._return_err_msg(name, errs)
+            return            
         
         local_prefix_str = Name.to_str(Name.from_bytes(connect_info.local_prefix))
         local_forwarder_str = ''
@@ -113,22 +123,31 @@ class NameAuthAssign(object):
         self.entities_cache[nonce] |= {'encoder': encoder, 'encoder_type': encoder_type_str}
         
         # parsing boot params and preparing response
-        encoder.parse_boot_params(content)
+        try:
+            encoder.parse_boot_params(content)
+        except:
+            errs = ErrorMessage()
+            errs.code = ERROR_BAD_RESPONSE_FORMAT[0]
+            errs.info = ERROR_BAD_RESPONSE_FORMAT[1].encode()
+            self._return_err_msg(name, errs)
+            return            
         
         auth_type_str = encoder_type_str[:encoder_type_str.find('ModeEncoder')]
         membership_checker = self.membership_checkers[auth_type_str]
         encoder.auth_state = await membership_checker.check(encoder.auth_state)
+        self.entities_storage[nonce] = encoder.auth_state
         if not encoder.auth_state.is_member:
-            logging.error(f'Authentication id permission denied')
             errs = ErrorMessage()
-            errs.code = ERROR_INVALID_PARAMTERS[0]
-            errs.info = ERROR_INVALID_PARAMTERS[1].encode()
+            errs.code = ERROR_IDENTITY_NOT_ALLOWED[0]
+            errs.info = ERROR_IDENTITY_NOT_ALLOWED[1].encode()
+            self._return_err_msg(name, errs)
+            self.entities_storage[nonce] = encoder.auth_state
             return
     
         authenticator = self.authenticators[auth_type_str]
-        encoder.auth_state, err = await authenticator.after_receive_boot_params(encoder.auth_state)
-        self.app.put_data(name, content=encoder.prepare_boot_response(), freshness_period = 10000, signer = self._get_signer(name))
+        encoder.auth_state = await authenticator.after_receive_boot_params(encoder.auth_state)
         self.entities_storage[nonce] = encoder.auth_state
+        self.app.put_data(name, content=encoder.prepare_boot_response(), freshness_period = 10000, signer = self._get_signer(name))
         return
 
     async def on_idproof_notification(self, name, _app_param):
@@ -151,30 +170,44 @@ class NameAuthAssign(object):
             interest_param.forwarding_hint = [Name.from_str(local_forwarder_str)]
         data_name, _, content = await self.app.express_interest(
             idproof_params_name,  must_be_fresh=True, can_be_prefix=False, lifetime=6000)
-        
-        encoder.parse_idproof_params(content)
+
+        try:
+            encoder.parse_idproof_params(content)
+        except:
+            errs = ErrorMessage()
+            errs.code = ERROR_BAD_RESPONSE_FORMAT[0]
+            errs.info = ERROR_BAD_RESPONSE_FORMAT[1].encode()
+            self._return_err_msg(name, errs)
+            return         
+
         # another string processing
         auth_type_str = encoder_type_str[:encoder_type_str.find('ModeEncoder')]
         authenticator = self.authenticators[auth_type_str]
-        encoder.auth_state, err = await authenticator.after_receive_idproof_params(encoder.auth_state)
-        
-        if encoder.auth_state.is_authenticated and err is None:
-            # assign name
-            name_assigner = self.name_assigners[auth_type_str]
-            assigned_name = name_assigner.assign(encoder.auth_state)
-            key_id = Component.from_bytes(encoder.auth_state.nonce.to_bytes(8, 'big'))
-            proof_of_possess_idname = [Component.from_str('32=authenticate')] + assigned_name
-            proof_of_possess_keyname = proof_of_possess_idname + [KEY_COMPONENT, key_id]
-            proof_of_possess_name_mocked = proof_of_possess_keyname + Name.from_str('/NA/v=0')
-            proof_of_possess_name, proof_of_possess = \
-                derive_cert(proof_of_possess_keyname, 'NA',
-                            encoder.auth_state.pub_key,
-                            self._get_signer(proof_of_possess_name_mocked),
-                            datetime.utcnow(), 10000)
-            logging.debug(f'Generating PoP {Name.to_str(proof_of_possess_name)}')
-            self.app.put_data(name, content=encoder.prepare_idproof_response(proof_of_possess = proof_of_possess),
-                            freshness_period = 10000, signer = self._get_signer(name))
+        encoder.auth_state = await authenticator.after_receive_idproof_params(encoder.auth_state)
+        self.entities_storage[nonce] = encoder.auth_state
+        if not encoder.auth_state.is_authenticated:
+            errs = ErrorMessage()
+            errs.code = ERROR_BAD_IDENTITY_PROOF[0]
+            errs.info = ERROR_BAD_IDENTITY_PROOF[1].encode()
+            self._return_err_msg(name, errs)
             self.entities_storage[nonce] = encoder.auth_state
+            return
+
+        name_assigner = self.name_assigners[auth_type_str]
+        assigned_name = name_assigner.assign(encoder.auth_state)
+        key_id = Component.from_bytes(encoder.auth_state.nonce.to_bytes(8, 'big'))
+        proof_of_possess_idname = [Component.from_str('32=authenticate')] + assigned_name
+        proof_of_possess_keyname = proof_of_possess_idname + [KEY_COMPONENT, key_id]
+        proof_of_possess_name_mocked = proof_of_possess_keyname + Name.from_str('/NA/v=0')
+        proof_of_possess_name, proof_of_possess = \
+            derive_cert(proof_of_possess_keyname, 'NA',
+                        encoder.auth_state.pub_key,
+                        self._get_signer(proof_of_possess_name_mocked),
+                        datetime.utcnow(), 10000)
+        logging.debug(f'Generating PoP {Name.to_str(proof_of_possess_name)}')
+        self.app.put_data(name, content=encoder.prepare_idproof_response(proof_of_possess = proof_of_possess),
+                        freshness_period = 10000, signer = self._get_signer(name))
+        self.entities_storage[nonce] = encoder.auth_state
 
     async def register(self):
         @self.app.route(self.aa_prefix + '/NAA')
