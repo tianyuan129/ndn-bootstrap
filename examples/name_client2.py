@@ -5,7 +5,7 @@ from ndn.security import TpmFile, KeychainSqlite3, Sha256WithEcdsaSigner
 from ndn.app_support.security_v2 import parse_certificate
 from ndn.app_support.light_versec import Checker, compile_lvs, DEFAULT_USER_FNS, lvs_validator
 
-from bootstrap.ndnauth.app.name_client import NameRequster
+from bootstrap.ndnauth.app.name_requester import NameRequster
 from bootstrap.config import get_yaml
 from Cryptodome.PublicKey import ECC
 
@@ -39,10 +39,13 @@ lvs_text = '''
 #site: "ndn"/"site1"
 #root: #site/#KEY
 #auth_signer: #site/"auth-signer"/#KEY <= #root
+#cert_signer: #site/"cert-signer"/#KEY <= #root
 #BootResponse: #site/"NAA"/"BOOT"/nonce/NOTIFY/_ <= #auth_signer
 #IdProofResponse: #site/"NAA"/"PROOF"/nonce/NOTIFY <= #auth_signer
 #proof_of_possession1: "32=authenticate"/_/_/_/_/#KEY <= #auth_signer
 #proof_of_possession2: "32=authenticate"/_/_/_/#KEY <= #auth_signer
+#proof_of_possession3: "32=authenticate"/_/_/#KEY <= #auth_signer
+#proof_of_possession4: "32=authenticate"/_/#KEY <= #auth_signer
 '''
 lvs_model = compile_lvs(lvs_text)
 checker = Checker(lvs_model, DEFAULT_USER_FNS)
@@ -50,13 +53,13 @@ requester = NameRequster(app, lvs_validator(checker, app, trust_anchor_data))
 keyname = ''
 async def run():
     # get authentication, and pop    
-    pop = await requester.authenticate_user('/ndn/site1', '/alice', None,
+    pop, prvkey_der = await requester.authenticate_user('/ndn/site1', '/alice', None,
         'tianyuan@cs.ucla.edu', lambda _ : '1234'
     )
     pop_data = parse_certificate(pop)
     logging.debug(f'Receiving Pop {Name.to_str(pop_data.name)}')
     # save the name-key binding
-    tpm.save_key(pop_data.name[:-2], key_der)
+    tpm.save_key(pop_data.name[:-2], prvkey_der)
     max_width = 70
     from base64 import b64encode
     from math import ceil
@@ -68,7 +71,16 @@ async def run():
             line = pop_str[i * max_width : (i + 1) * max_width]  + '\n'
             pop_file.write(line)
     tpm.delete_key(pop_data.name[:-2])
- 
+
+    # x509_chain_file = open('fullchain.pem')
+    # x509_prvkey_file = open('privkey.pem')
+    # pop = await requester.authenticate_server('/ndn/site1', '/alice', None,
+    #     bytes(x509_chain_file.read(), 'utf-8'),
+    #     bytes(x509_prvkey_file.read(), 'utf-8')
+    # )
+    # x509_chain_file.close()
+    # x509_prvkey_file.close()
+
 def main () -> int:
     app.run_forever(after_start=run())
 if __name__ == "__main__":

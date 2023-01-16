@@ -4,7 +4,7 @@ from abc import abstractmethod
 class AuthState(TlvModel):
     nonce = BytesField(1) # this should be the primary key
     proof_of_possess = BytesField(11)
-    is_memeber = UintField(12)
+    is_member = UintField(12)
     is_authenticated = UintField(13)
 
 class AuthStateUser(AuthState):

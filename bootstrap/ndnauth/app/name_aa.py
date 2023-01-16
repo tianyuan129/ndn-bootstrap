@@ -51,8 +51,7 @@ class NameAuthAssign(object):
         self.membership_checkers = {}
         self.authenticators = {}
         self.name_assigners = {}
-        
-        
+
         auth_configs = config['auth_config']
         for auth_type in auth_configs:
             config_section = auth_configs[auth_type]
@@ -118,8 +117,8 @@ class NameAuthAssign(object):
         
         auth_type_str = encoder_type_str[:encoder_type_str.find('ModeEncoder')]
         membership_checker = self.membership_checkers[auth_type_str]
-        allowed = await membership_checker.check(encoder.auth_state)
-        if not allowed:
+        encoder.auth_state = await membership_checker.check(encoder.auth_state)
+        if not encoder.auth_state.is_member:
             logging.error(f'Authentication id permission denied')
             errs = ErrorMessage()
             errs.code = ERROR_INVALID_PARAMTERS[0]

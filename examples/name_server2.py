@@ -31,6 +31,8 @@ lvs_text = '''
 #IdProofResponse: #site/"NAA"/"PROOF"/nonce/NOTIFY <= #auth_signer
 #proof_of_possession1: "32=authenticate"/_/_/_/_/#KEY <= #auth_signer
 #proof_of_possession2: "32=authenticate"/_/_/_/#KEY <= #auth_signer
+#proof_of_possession3: "32=authenticate"/_/_/#KEY <= #auth_signer
+#proof_of_possession4: "32=authenticate"/_/#KEY <= #auth_signer
 '''
 
 lvs_model = compile_lvs(lvs_text)

@@ -9,18 +9,15 @@ from ..auth_state import *
 class UserMembershipChecker(MembershipChecker): 
     def __init__(self, config: Dict):
         self.config = config
-        for checker_type in self.config:
-            self.checker = lambda auth_state : getattr(__class__, checker_type)(self, self.config[checker_type], auth_state)
+        self.checker = lambda auth_state : self.whitelist(self.config['whitelist'], auth_state)
             
-    def whitelist(self, whitelist: List, auth_state: AuthStateUser) -> AuthState:
+    def whitelist(self, whitelist: List, auth_state: AuthStateUser) -> AuthStateUser:
         if bytes(auth_state.email).decode('utf-8') in whitelist:
-            return auth_state, None
+            auth_state.is_member = True
+            return auth_state
         else:
-            auth_state.is_memeber = False
-            errs = ErrorMessage()
-            errs.code = ERROR_NAME_NOT_ALLOWED[0]
-            errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
-            return auth_state, errs
+            auth_state.is_member = False
+            return auth_state
    
-    async def check(self, auth_state: AuthStateUser) -> AuthState:
+    async def check(self, auth_state: AuthStateUser) -> AuthStateUser:
         return self.checker(auth_state)

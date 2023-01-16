@@ -1,11 +1,17 @@
 from typing import Tuple, Optional
 import logging, sys
+
 from Cryptodome.PublicKey import ECC
+from cryptography import x509
+from cryptography.hazmat.primitives.asymmetric import rsa, ec, utils
+from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
+from cryptography.hazmat.primitives.hashes import SHA256, Hash
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from ndn.app import NDNApp, Validator
-from ndn.encoding import Name, Component, FormalName, VarBinaryStr, tlv_model, NonStrictName, BinaryStr, InterestParam
-from ndn.app_support.security_v2 import parse_certificate, KEY_COMPONENT, self_sign
-from ndn.security import Sha256WithEcdsaSigner
+from ndn.encoding import Name, Component, FormalName, VarBinaryStr, NonStrictName, BinaryStr, InterestParam
+from ndn.app_support.security_v2 import KEY_COMPONENT, self_sign
+from ndn.security import Sha256WithEcdsaSigner, Sha256WithRsaSigner
 from ndn.utils import gen_nonce_64
 
 from ..protocol import *
@@ -25,14 +31,6 @@ class NameRequster(object):
         encoder_type = getattr(sys.modules[__name__], mode.capitalize() + 'ModeEncoder')
         encoder = object.__new__(encoder_type, nonce)
         encoder.__init__(nonce)
-        # create a key pair first
-        pri_key = ECC.generate(curve=f'P-256')
-        pub_key = bytes(pri_key.public_key().export_key(format='DER'))
-        key_der = pri_key.export_key(format='DER', use_pkcs8=False)
-        # create a dummy signer
-        tmpkey_name = Name.from_str('/a/b/c') + [KEY_COMPONENT, Component.from_number(nonce, Component.TYPE_GENERIC)]
-        signer = Sha256WithEcdsaSigner(tmpkey_name, key_der)
-        _, csr_buf = self_sign(tmpkey_name, pub_key, signer)
 
         # /<local-prefix>/NAA/BOOT/<nonce>/MSG
         bootstap_params_name = Name.from_str(local_prefix + '/NAA/BOOT') \
@@ -40,7 +38,7 @@ class NameRequster(object):
         @self.app.route(bootstap_params_name)
         def _on_boot_params_interest(name: FormalName, _params: InterestParam, _app_param: Optional[BinaryStr] | None):
             self.app.put_data(name, encoder.prepare_boot_params(**kwargs),
-                              freshness_period = 10000, signer = signer)
+                              freshness_period = 10000, signer = kwargs['signer'])
         interest_name = Name.from_str(controller_prefix + '/NAA/BOOT') \
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('NOTIFY')]
         connect_info = ConnectvityInfo()
@@ -61,7 +59,7 @@ class NameRequster(object):
         @self.app.route(idproof_params_name)
         def _on_idproof_params_interest(name: FormalName, _params: InterestParam, _app_param: Optional[BinaryStr] | None):
             self.app.put_data(name, encoder.prepare_idproof_params(proof=prover(boot_parse_ret)),
-                              freshness_period = 10000, signer = signer)
+                              freshness_period = 10000, signer = kwargs['signer'])
         # /<controller-prefix>/NAA/PROOF/<nonce>/NOTIFY/<ParametersSha256Digest>
         interest_name = Name.from_str(controller_prefix + '/NAA/PROOF') \
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('NOTIFY')]
@@ -74,7 +72,7 @@ class NameRequster(object):
         
     async def authenticate_user(self, controller_prefix: NonStrictName,
                                 local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
-                                email: str, prover: Prover) -> Tuple[VarBinaryStr]:
+                                email: str, prover: Prover) -> Tuple[VarBinaryStr, bytes]:
         # create a key pair first
         nonce = gen_nonce_64()
         pri_key = ECC.generate(curve=f'P-256')
@@ -84,6 +82,50 @@ class NameRequster(object):
         tmpkey_name = Name.from_str(local_prefix) + [KEY_COMPONENT, Component.from_number(nonce, Component.TYPE_GENERIC)]
         signer = Sha256WithEcdsaSigner(tmpkey_name, key_der)
         _, csr_buf = self_sign(tmpkey_name, pub_key, signer)
+        pop_buf = await self.authenticate_base(nonce, controller_prefix, local_prefix, 
+                                               local_forwarder, 'user', prover,
+                                               email=email, csr=csr_buf, signer = signer)
+        return pop_buf, key_der
+
+    async def authenticate_server(self, controller_prefix: NonStrictName,
+                                  local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
+                                  x509_chain: bytes, x509_prv_key: bytes) -> Tuple[VarBinaryStr]:
+        # create a key pair first
+        nonce = gen_nonce_64()
+        prvkey = load_pem_private_key(x509_prv_key, password=None)
+        prvkey_der = prvkey.private_bytes(
+            encoding=Encoding.DER, format=PrivateFormat.PKCS8,
+            encryption_algorithm=NoEncryption()
+        )
+        tmpkey_name = Name.from_str(local_prefix) + [KEY_COMPONENT, Component.from_number(nonce, Component.TYPE_GENERIC)]
+        if isinstance(prvkey, rsa.RSAPrivateKey):
+            signer = Sha256WithRsaSigner(tmpkey_name, prvkey_der)
+        elif isinstance(prvkey, ec.EllipticCurvePrivateKey):
+            signer = Sha256WithEcdsaSigner(tmpkey_name, prvkey_der)
+        else:
+            raise TypeError
+
+        def prover(rand: bytes) -> bytes:
+            chosen_hash = SHA256()
+            hasher = Hash(chosen_hash)
+            hasher.update(rand)
+            digest = hasher.finalize()
+            if isinstance(prvkey, rsa.RSAPrivateKey):
+                return prvkey.sign(
+                    digest,
+                    padding.PSS(
+                        mgf=padding.MGF1(SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH
+                    ),
+                    utils.Prehashed(chosen_hash)
+                )
+            elif isinstance(prvkey, ec.EllipticCurvePrivateKey):
+                return prvkey.sign(
+                    digest,
+                    ec.ECDSA(utils.Prehashed(chosen_hash))
+                )
+            else:
+                raise TypeError
         return await self.authenticate_base(nonce, controller_prefix, local_prefix, 
-                                            local_forwarder, 'user', prover,
-                                            email=email, csr=csr_buf)
+                                            local_forwarder, 'server', prover,
+                                            x509_chain=x509_chain, signer = signer)

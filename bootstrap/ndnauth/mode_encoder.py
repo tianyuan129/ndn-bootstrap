@@ -10,11 +10,13 @@ from .auth_state import *
 from ..crypto_tools import *
 
 def find_encoder(tlv_type):
-    _encoders = {TLV_BOOT_PARAMS_RES_USER_TYPE: 'UserModeEncoder'}
+    _encoders = {
+                    TLV_BOOT_PARAMS_RES_USER_TYPE: 'UserModeEncoder',
+                    TLV_BOOT_PARAMS_RES_SERVER_TYPE: 'ServerModeEncoder'
+                }
     return _encoders[tlv_type]
 
 class ModeEncoder(object):
-    auth_state = AuthState()
     @abstractmethod
     def boot_params_dec(self, data_name, content) -> AuthState:
         pass
@@ -28,7 +30,7 @@ class ModeEncoder(object):
     def parse_boot_response(self, content) -> bytes | None:
         pass
     abstractmethod
-    def prepare_boot_response(self) -> bytes:
+    def prepare_boot_response(self, **kwargs) -> bytes:
         pass
     @abstractmethod
     def prepare_idproof_params(self, **kwargs):
@@ -85,7 +87,7 @@ class UserModeEncoder(ModeEncoder):
         from base64 import b64encode
         logging.debug(f'Shared Secret: {b64encode(self.ecdh.derived_key)}')
 
-    def prepare_boot_response(self):
+    def prepare_boot_response(self, **kwargs):
         boot_response = BootResponseUser()
         boot_response.ecdh_pub = self.ecdh.pub_key_encoded
         boot_response.salt = self.salt
@@ -113,3 +115,47 @@ class UserModeEncoder(ModeEncoder):
         idproof_response = IdProofResponse.parse(content)
         self.auth_state.proof_of_possess = idproof_response.proof_of_possess
     
+class ServerModeEncoder(ModeEncoder):
+    def __init__(self, nonce):
+        self.auth_state = AuthStateServer()
+        self.auth_state.nonce = nonce
+        pass
+
+    def parse_boot_params(self, content):
+        boot_params = BootParamsResponseServer.parse(content)
+        self.auth_state.x509_chain = boot_params.inner.x509_chain
+
+    def prepare_boot_params(self, **kwargs):
+        boot_params_inner = BootParamsResponseServerInner()
+        boot_params = BootParamsResponseServer()
+        boot_params_inner.x509_chain = kwargs['x509_chain']
+        boot_params.inner = boot_params_inner
+        return boot_params.encode()
+    
+    def parse_boot_response(self, content):
+        boot_response = BootResponseServer.parse(content)
+        self.auth_state.rand = boot_response.rand
+        return self.auth_state.rand
+
+    def prepare_boot_response(self, **kwargs):
+        boot_response = BootResponseServer()
+        boot_response.rand = self.auth_state.rand
+        return boot_response.encode()
+    
+    def prepare_idproof_params(self, **kwargs):
+        idproof_params = IdProofParamsServer()
+        idproof_params.signed_rand = kwargs['proof']
+        return idproof_params.encode()
+
+    def prepare_idproof_response(self, **kwargs):
+        idproof_response = IdProofResponse()
+        idproof_response.proof_of_possess = kwargs['proof_of_possess']
+        return idproof_response.encode()
+    
+    def parse_idproof_params(self, content):
+        idproof_params = IdProofParamsServer.parse(content)
+        self.auth_state.signed_rand = idproof_params.signed_rand
+    
+    def parse_idproof_response(self, content):
+        idproof_response = IdProofResponse.parse(content)
+        self.auth_state.proof_of_possess = idproof_response.proof_of_possess

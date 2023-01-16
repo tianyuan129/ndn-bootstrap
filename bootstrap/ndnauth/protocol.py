@@ -116,27 +116,34 @@ TLV_BOOT_PARAMS_RES_USER_TYPE = 201
 class BootParamsResponseUser(TlvModel):
     inner = ModelField(TLV_BOOT_PARAMS_RES_USER_TYPE, BootParamsResponseUserInner)
 
+TLV_X509_CHAIN_TYPE = 139
+class BootParamsResponseServerInner(TlvModel):
+    x509_chain = BytesField(TLV_X509_CHAIN_TYPE)
+
+TLV_BOOT_PARAMS_RES_SERVER_TYPE = 203
+class BootParamsResponseServer(TlvModel):
+    inner = ModelField(TLV_BOOT_PARAMS_RES_SERVER_TYPE, BootParamsResponseServerInner)
+
 TLV_SALT_TYPE = 141
 class BootResponseUser(TlvModel):
     ecdh_pub = BytesField(TLV_ECDB_PUB_TYPE)
     salt = BytesField(TLV_SALT_TYPE)
 
+TLV_RAND_TYPE = 143
+class BootResponseServer(TlvModel):
+    rand = BytesField(TLV_RAND_TYPE)
+
 TLV_ENCRYPTED_CODE_TYPE = 145
 class IdProofParamsUser(TlvModel):
     encrypted_code = ModelField(TLV_ENCRYPTED_CODE_TYPE, EncryptedMessage)
 
-TLV_PROOF_OF_POSSESSION_TYPE = 147
+TLV_SIGNED_RAND_TYPE = 147
+class IdProofParamsServer(TlvModel):
+    signed_rand = BytesField(TLV_SIGNED_RAND_TYPE)
+
+TLV_PROOF_OF_POSSESSION_TYPE = 159
 class IdProofResponse(TlvModel):
     proof_of_possess = BytesField(TLV_PROOF_OF_POSSESSION_TYPE)
-
-
-
-
-
-
-
-
-
 
 
 TLV_ERROR_CODE = 171
