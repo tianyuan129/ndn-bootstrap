@@ -71,16 +71,16 @@ async def run():
         for i in range(0, lines_needed):
             line = pop_str[i * max_width : (i + 1) * max_width]  + '\n'
             pop_file.write(line)
-    # tpm.delete_key(pop_data.name[:-2])
+    tpm.delete_key(pop_data.name[:-2])
 
-    # x509_chain_file = open('examples/alice-ndn-cert.pem')
-    # x509_prvkey_file = open('examples/alice-ndn-privkey.pem')
-    # pop = await requester.authenticate_server('/ndn/site1', '/alice', None,
-    #     bytes(x509_chain_file.read(), 'utf-8'),
-    #     bytes(x509_prvkey_file.read(), 'utf-8')
-    # )
-    # x509_chain_file.close()
-    # x509_prvkey_file.close()
+    x509_chain_file = open('examples/low-level/alice-ndn-cert.pem')
+    x509_prvkey_file = open('examples/low-level/alice-ndn-privkey.pem')
+    pop = await requester.authenticate_server('/ndn/site1', '/alice', None,
+        bytes(x509_chain_file.read(), 'utf-8'),
+        bytes(x509_prvkey_file.read(), 'utf-8')
+    )
+    x509_chain_file.close()
+    x509_prvkey_file.close()
 
     app.shutdown()
 def main () -> int:

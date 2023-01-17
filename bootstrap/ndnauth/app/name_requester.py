@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.hashes import SHA256, Hash
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from ndn.app import NDNApp, Validator
-from ndn.encoding import Name, Component, FormalName, VarBinaryStr, NonStrictName, BinaryStr, InterestParam
+from ndn.encoding import Name, Component, FormalName, VarBinaryStr, NonStrictName, BinaryStr, InterestParam, parse_tl_num
 from ndn.app_support.security_v2 import KEY_COMPONENT, self_sign
 from ndn.security import Sha256WithEcdsaSigner, Sha256WithRsaSigner
 from ndn.utils import gen_nonce_64
@@ -24,6 +24,12 @@ class NameRequster(object):
     def __init__(self, app: NDNApp, validator: Validator):
         self.app = app
         self.data_validator = validator
+        
+    def _check_error(self, content):
+        tlv_type, _  = parse_tl_num(content)
+        if tlv_type is TLV_ERROR_CODE:
+            err = ErrorMessage.parse(content)
+            raise ProtoError(bytes(err.info).decode('utf-8'))        
         
     async def authenticate_base(self, nonce, controller_prefix: NonStrictName,
                                 local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
@@ -51,6 +57,7 @@ class NameRequster(object):
             validator=self.data_validator)
         # /<controller-prefix>/NAA/BOOT/<nonce>/NOTIFY/<ParametersSha256Digest>
         # boot response may contain useful information for idproof
+        self._check_error(content)
         boot_parse_ret = encoder.parse_boot_response(content)
         logging.debug(f'Receiving Data {Name.to_str(data_name)}')
 
@@ -69,6 +76,7 @@ class NameRequster(object):
             validator=self.data_validator)
         # /<controller-prefix>/NAA/BOOT/<nonce>/NOTIFY/<ParametersSha256Digest>
         logging.debug(f'Receiving Data {Name.to_str(data_name)}')
+        self._check_error(content)
         encoder.parse_idproof_response(content)
         return encoder.auth_state.proof_of_possess
         

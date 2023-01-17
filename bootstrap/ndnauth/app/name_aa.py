@@ -155,6 +155,15 @@ class NameAuthAssign(object):
         logging.debug(f'Received Nonce: {nonce}')
         connect_info = self.entities_cache[nonce]['connect_info']
         encoder = self.entities_cache[nonce]['encoder']
+        
+        # if rejected before, keep the decision
+        if not encoder.auth_state.is_member:
+            errs = ErrorMessage()
+            errs.code = ERROR_IDENTITY_NOT_ALLOWED[0]
+            errs.info = ERROR_IDENTITY_NOT_ALLOWED[1].encode()
+            self._return_err_msg(name, errs)
+            self.entities_storage[nonce] = encoder.auth_state
+            return
         encoder_type_str = self.entities_cache[nonce]['encoder_type']
         local_prefix_str = connect_info[0]
         local_forwarder_str = connect_info[1]
