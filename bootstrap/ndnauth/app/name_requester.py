@@ -82,7 +82,7 @@ class NameRequster(object):
         
     async def authenticate_user(self, controller_prefix: NonStrictName,
                                 local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
-                                email: str, prover: Prover) -> Tuple[VarBinaryStr, bytes]:
+                                email: str, prover: Prover) -> Tuple[VarBinaryStr, Sha256WithEcdsaSigner]:
         # create a key pair first
         nonce = gen_nonce_64()
         pri_key = ECC.generate(curve=f'P-256')
@@ -95,11 +95,11 @@ class NameRequster(object):
         pop_buf = await self.authenticate_base(nonce, controller_prefix, local_prefix, 
                                                local_forwarder, 'user', prover,
                                                email=email, csr=csr_buf, signer = signer)
-        return pop_buf, key_der
+        return pop_buf, signer
 
     async def authenticate_server(self, controller_prefix: NonStrictName,
                                   local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
-                                  x509_chain: bytes, x509_prv_key: bytes) -> Tuple[VarBinaryStr]:
+                                  x509_chain: bytes, x509_prv_key: bytes) -> Tuple[VarBinaryStr, Sha256WithRsaSigner | Sha256WithEcdsaSigner]:
         # create a key pair first
         nonce = gen_nonce_64()
         prvkey = load_pem_private_key(x509_prv_key, password=None)
@@ -136,6 +136,7 @@ class NameRequster(object):
                 )
             else:
                 raise TypeError
-        return await self.authenticate_base(nonce, controller_prefix, local_prefix, 
-                                            local_forwarder, 'server', prover,
-                                            x509_chain=x509_chain, signer = signer)
+        pop_buf = await self.authenticate_base(nonce, controller_prefix, local_prefix, 
+                                               local_forwarder, 'server', prover,
+                                               x509_chain=x509_chain, signer = signer)
+        return pop_buf, signer

@@ -3,7 +3,7 @@ from typing import Dict
 import logging
 from cryptography import x509, exceptions
 from cryptography.hazmat.primitives.asymmetric import rsa, ec, utils
-from cryptography.hazmat.primitives.serialization import load_pem_public_key, Encoding, PublicFormat
+from cryptography.hazmat.primitives.serialization import load_der_public_key, Encoding, PublicFormat
 from cryptography.hazmat.primitives.hashes import SHA256, Hash
 from cryptography.hazmat.primitives.asymmetric import padding
 
@@ -19,12 +19,12 @@ class ServerAuthenticator(Authenticator):
 
     async def after_receive_boot_params(self, auth_state: AuthStateServer) -> AuthStateServer:
         loaded_chain = x509.load_pem_x509_certificates(bytes(auth_state.x509_chain))
-        auth_state.pub_key = loaded_chain[0].public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+        auth_state.pub_key = loaded_chain[0].public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
         auth_state.rand = urandom(8)
         return auth_state
 
     async def after_receive_idproof_params(self, auth_state: AuthStateServer) -> AuthStateServer:
-        pub_key = load_pem_public_key(bytes(auth_state.pub_key))
+        pub_key = load_der_public_key(bytes(auth_state.pub_key))
         if isinstance(pub_key, rsa.RSAPublicKey):
             try:
                 pub_key.verify(

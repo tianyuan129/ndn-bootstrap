@@ -42,6 +42,10 @@ ERROR_BAD_RAN_OUT_OF_TRIES = [7, 'BAD_RAN_OUT_OF_TRIES']
 ERROR_BAD_RAN_OUT_OF_TIMES = [8, 'BAD_RAN_OUT_OF_TRIES']
 ERROR_NOT_AVAILABLE_NAMES = [9, 'NOT_AVAILABLE_NAMES']
 
+class Parameter(TlvModel):
+    key = BytesField(TLV_PARAMETER_KEY_TYPE, is_string=True)
+    value = BytesField(TLV_PARAMETER_VALUE_TYPE)
+    
 class NewRequest(TlvModel):
     ecdh_pub = BytesField(TLV_ECDH_PUB_TYPE)
     cert_request = BytesField(TLV_CERT_REQUEST_TYPE)
@@ -52,20 +56,14 @@ class NewResponse(TlvModel):
     request_id = BytesField(TLV_REQUEST_ID_TYPE)
     challenges = RepeatedField(BytesField(TLV_CHALLENGE_TYPE, is_string=True))
 
-class Parameter(TlvModel):
-    key = BytesField(TLV_PARAMETER_KEY_TYPE)
-    value = BytesField(TLV_PARAMETER_VALUE_TYPE)
-    
+# doesn't contain parameters
 class ChallengeRequest(TlvModel):
-    selected_challenge = BytesField(TLV_SELECTED_CHALLENGE_TYPE)
-    # note: we cannot use this since parameter itself isn't a tlv
-    # parameters = RepeatedField(Parameter)
-    parameter_key = BytesField(TLV_PARAMETER_KEY_TYPE)
-    parameter_value = BytesField(TLV_PARAMETER_VALUE_TYPE)
+    selected_challenge = BytesField(TLV_SELECTED_CHALLENGE_TYPE, is_string=True)
 
+# doesn't contain parameters
 class ChallengeResponse(TlvModel):
     status = UintField(TLV_STATUS_TYPE)
-    challenge_status = BytesField(TLV_CHALLENGE_STATUS_TYPE)
+    challenge_status = BytesField(TLV_CHALLENGE_STATUS_TYPE, is_string=True)
     remaining_tries = UintField(TLV_REMAINING_TRIES_TYPE)
     remaining_time = UintField(TLV_REMAINING_TIME_TYPE)
     # note: we cannot use this since parameter itself isn't a tlv
@@ -73,9 +71,7 @@ class ChallengeResponse(TlvModel):
     issued_cert_name = BytesField(TLV_ISSUED_CERT_NAME_TYPE)
     # forwarding_hint = BytesField(TypeNumber.FORWARDING_HINT)
     forwarding_hint = BytesField(TypeNumber.FORWARDING_HINT)
-    parameter_key = BytesField(TLV_PARAMETER_KEY_TYPE)
-    parameter_value = BytesField(TLV_PARAMETER_VALUE_TYPE)
 
 class ErrorMessage(TlvModel):
     code = UintField(TLV_ERROR_CODE)
-    info = BytesField(TLV_ERROR_INFO)
+    info = BytesField(TLV_ERROR_INFO, is_string=True)

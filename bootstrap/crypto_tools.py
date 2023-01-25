@@ -49,8 +49,7 @@ def gen_encrypted_message(aes_key: bytes, associated: bytes, plaintext: bytes,
     # this will auto increment the iv counter
      
     if iv_counter is None:
-        iv_counter = 0
-    
+        iv_counter = 0    
     if iv_random is None:
         iv_random = urandom(8)
 

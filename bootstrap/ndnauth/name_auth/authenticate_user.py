@@ -19,9 +19,8 @@ from ...crypto_tools import *
 class UserAuthenticator(Authenticator):
     def __init__(self, config: Dict):
         self.config = config
-        self.email_sender = lambda email, secret : getattr(__class__, self.config['email_sender'])(self, email, secret)
 
-    def sender_default(self, email: str, secret: str):
+    def email_sender(self, email: str, secret: str):
         socket.setdefaulttimeout(10)
         # open config
         confParser = ConfigParser()

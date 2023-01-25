@@ -8,17 +8,17 @@ from datetime import datetime
 from ndn.app import NDNApp, Validator
 from ndn.encoding import Name, InterestParam, BinaryStr, FormalName, Component, parse_tl_num
 from ndn.app_support.security_v2 import parse_certificate, KEY_COMPONENT, derive_cert
-from ndn.app_support.keychain_register import attach_keychain_register
 from ndn.app_support.light_versec import Checker
 from ndn.security import KeychainSqlite3
 
 from ..protocol import *
 from ...crypto_tools import *
 from ..name_auth import *
-from ..name_assign import *
+from ..name_assigner import *
 from ..auth_state import *
 from ..mode_encoder import *
 from ...keychain_register import attach_keychain_register_appv1
+from ...types import NameAssignFunc
 _POSITION_NONCE_IN_BOOT_NOTIFICATION = -3
 _POSITION_NONCE_IN_PROOF_NOTIFICATION = -2
 
@@ -29,23 +29,23 @@ class NameAuthAssign(object):
         self.entities_cache = {}
         self.entities_storage = {}
         self.config = config
-        self.aa_prefix = self.config['prefix_config']['prefix_name']
+        self.anchor_name = self.config['identity_config']['anchor_name']
+        self.aa_name = self.config['identity_config']['auth_name']
         self.keychain = keychain
         self.checker = checker
         self.data_validator = validator
 
         try:
-            aa_id = self.keychain[self.aa_prefix]
+            aa_id = self.keychain[self.aa_name]
             aa_cert = aa_id.default_key().default_cert().data
             self.aa_cert_data = parse_certificate(aa_cert)
         except:
-            aa_id = self.keychain.touch_identity(self.aa_prefix)
+            aa_id = self.keychain.touch_identity(self.aa_name)
             aa_cert = aa_id.default_key().default_cert().data
             self.aa_cert_data = parse_certificate(aa_cert)
 
         self.app = app
         app.keychain = self.keychain
-        attach_keychain_register_appv1(self.keychain, self.app)
 
         # initialize membership checker, authenticator, and name assigner
         self.membership_checkers = {}
@@ -57,23 +57,24 @@ class NameAuthAssign(object):
             config_section = auth_configs[auth_type]
 
             # locate the corresponding membership checker
-            checker_type_str = auth_type.capitalize() + 'MembershipChecker'
+            capitalized = auth_type.capitalize()
+            checker_type_str = capitalized + 'MembershipChecker'
             membership_checker_type = getattr(sys.modules[__name__], checker_type_str)
             membership_checker = object.__new__(membership_checker_type, config_section['membership_checker'])
             membership_checker.__init__(config_section['membership_checker'])
-            self.membership_checkers[auth_type.capitalize()] = membership_checker
+            self.membership_checkers[capitalized] = membership_checker
             
-            authenticator_type_str = auth_type.capitalize() + 'Authenticator'
+            authenticator_type_str = capitalized + 'Authenticator'
             authenticator_type = getattr(sys.modules[__name__], authenticator_type_str)
             authenticator = object.__new__(authenticator_type, config_section['authenticator'])
             authenticator.__init__(config_section['authenticator'])
-            self.authenticators[auth_type.capitalize()] = authenticator
+            self.authenticators[capitalized] = authenticator
 
-            name_assigner_type_str = auth_type.capitalize() + 'NameAssigner'
+            name_assigner_type_str = capitalized + 'NameAssigner'
             name_assigner_type = getattr(sys.modules[__name__], name_assigner_type_str)
-            name_assigner = object.__new__(name_assigner_type, config_section['name_assigner'])
-            name_assigner.__init__(config_section['name_assigner'])
-            self.name_assigners[auth_type.capitalize()] = name_assigner
+            name_assigner = object.__new__(name_assigner_type)
+            name_assigner.__init__()
+            self.name_assigners[capitalized] = name_assigner
 
     def _get_signer(self, name):
         suggested_keylocator = self.checker.suggest(name, self.keychain)
@@ -110,7 +111,7 @@ class NameAuthAssign(object):
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
         interest_param = InterestParam()
         interest_param.forwarding_hint = [connect_info.local_forwarder]
-        time.sleep(0.01)
+        time.sleep(0.001)
         data_name, _, content = await self.app.express_interest(
             boot_params_name,  must_be_fresh=True, can_be_prefix=False, lifetime=6000)
         
@@ -173,7 +174,7 @@ class NameAuthAssign(object):
         idproof_params_name = Name.from_str(local_prefix_str + '/NAA/PROOF') \
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
         interest_param = InterestParam()
-        time.sleep(0.01)
+        time.sleep(0.001)
                 
         if len(local_forwarder_str) > 0:
             interest_param.forwarding_hint = [Name.from_str(local_forwarder_str)]
@@ -212,19 +213,30 @@ class NameAuthAssign(object):
             derive_cert(proof_of_possess_keyname, 'NA',
                         encoder.auth_state.pub_key,
                         self._get_signer(proof_of_possess_name_mocked),
-                        datetime.utcnow(), 10000)
-        logging.debug(f'Generating PoP {Name.to_str(proof_of_possess_name)}')
+                        datetime.utcnow(), int(self.config['validity_period']['proof_of_possession']))
+        logging.info(f'Generating PoP {Name.to_str(proof_of_possess_name)}')
         self.app.put_data(name, content=encoder.prepare_idproof_response(proof_of_possess = proof_of_possess),
                         freshness_period = 10000, signer = self._get_signer(name))
         self.entities_storage[nonce] = encoder.auth_state
 
-    async def register(self):
-        @self.app.route(self.aa_prefix + '/NAA')
+    def load_name_assignment(self, auth_type: str, assign_func: NameAssignFunc):
+        capitalized = auth_type.capitalize()
+        if capitalized not in self.membership_checkers or \
+           capitalized not in self.authenticators or \
+           capitalized not in self.name_assigners:
+            raise Exception('Cannot load name assignment because'
+                            'no corresponding membership checker,'
+                            'authenticator or name preprocessor')
+        else:
+            self.name_assigners[capitalized].load_callback(assign_func)
+
+    def route(self):
+        @self.app.route(self.anchor_name + '/NAA')
         def _on_notification(name: FormalName, _params: InterestParam, _app_param: Optional[BinaryStr] | None):
             # dispatch to corresponding handlers
-            if Name.is_prefix(self.aa_prefix + '/NAA/BOOT', name):
+            if Name.is_prefix(self.anchor_name + '/NAA/BOOT', name):
                 asyncio.create_task(self.on_boot_notification(name, _app_param))
                 return
-            if Name.is_prefix(self.aa_prefix + '/NAA/PROOF', name):
+            if Name.is_prefix(self.anchor_name + '/NAA/PROOF', name):
                 asyncio.create_task(self.on_idproof_notification(name, _app_param))
                 return

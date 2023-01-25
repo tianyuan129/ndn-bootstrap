@@ -1,11 +1,13 @@
 from typing import Any, Callable, Tuple, List
-from ndn.encoding import NonStrictName, Signer
+from ndn.encoding import NonStrictName, Signer, FormalName
 
 GetSigner = Callable[[NonStrictName], Signer]
 
-Selector = Callable[[List[bytes]], Tuple[bytes, bytes, bytes]]
+Selector = Callable[[List[bytes]], Tuple[str, str, bytes]]
 
 Prover = Callable[[Any], bytes]
+
+NameAssignFunc = Callable[[str], FormalName]
 
 class InvalidName(Exception):
     """

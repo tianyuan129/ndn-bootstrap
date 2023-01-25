@@ -13,37 +13,53 @@ from .cert_state import *
 from .verifier import *
 
 from Cryptodome.Hash import SHA256
-from Cryptodome.PublicKey import ECC
+from Cryptodome.PublicKey import ECC, RSA
 from Cryptodome.Signature import DSS
+from cryptography import x509, exceptions
+from cryptography.hazmat.primitives.asymmetric import rsa, ec, utils
+from cryptography.hazmat.primitives.serialization import load_der_public_key, Encoding, PublicFormat
+from cryptography.hazmat.primitives.hashes import SHA256, Hash
+from cryptography.hazmat.primitives.asymmetric import padding
 
 class PossessionVerifier(Verifier):
     def __init__(self, app: NDNApp, config: Dict, validator: Validator):
-        ca_name_str = config['prefix_config']['prefix_name'] + '/CA'
+        ca_name_str = config['identity_config']['issuer_name'] + '/CA'
         self.app = app
         self.config = config
         self.ca_name = Name.from_str(ca_name_str)
         self.data_validator = validator
-        self._param_cache = {}
-    
+        
     @staticmethod
-    def _verify_raw_ecdsa(pubkey, nonce, proof) -> bool:
-        verifier = DSS.new(pubkey, 'fips-186-3', 'der')
-        h = SHA256.new()
-        h.update(nonce)
-        try:
-            verifier.verify(h, proof)
-            return True
-        except ValueError:
-            return False
-
-    async def actions_before_challenge(self, cert_state: CertState, params_in: Dict) -> Tuple[CertState, Dict, ErrorMessage]:        
-        # parsing the issued credential
-        if CHALLENGE_POSS_PARAMETER_KEY_ISSUEDCERT in params_in:
-            cert_state.auth_key = CHALLENGE_POSS_PARAMETER_KEY_ISSUEDCERT
-            cert_state.auth_value = params_in[CHALLENGE_POSS_PARAMETER_KEY_ISSUEDCERT]
-        credential_name, _, _, sig_ptrs = parse_data(cert_state.auth_value)
-        credential = parse_certificate(cert_state.auth_value)
-        credential_name = credential.name
+    def _verify_raw_signature(pub_key, nonce, proof) -> bool:
+        if isinstance(pub_key, rsa.RSAPublicKey):
+            try:
+                pub_key.verify(
+                    proof,
+                    nonce,
+                    padding.PKCS1v15(),
+                    SHA256()
+                )
+                return True
+            except exceptions.InvalidSignature:
+                return False
+        elif isinstance(pub_key, ec.EllipticCurvePublicKey):
+            try:
+                chosen_hash = SHA256()
+                hasher = Hash(chosen_hash)
+                hasher.update(nonce)
+                digest = hasher.finalize()
+                pub_key.verify(
+                    proof,
+                    digest,
+                    ec.ECDSA(utils.Prehashed(chosen_hash))
+                )
+                return True
+            except exceptions.InvalidSignature:
+                return False 
+        
+    async def actions_before_challenge(self, cert_state: CertState) -> Tuple[CertState, ErrorMessage]:        
+        credential_buf = cert_state.get_parameter('issued-cert')
+        credential_name, _, _, sig_ptrs = parse_data(credential_buf)
 
         # obtain public key
         signing_cert = sig_ptrs.signature_info.key_locator.name
@@ -52,42 +68,40 @@ class PossessionVerifier(Verifier):
         if not valid:
             errs = ErrorMessage()
             errs.code = ERROR_NAME_NOT_ALLOWED[0]
-            errs.info = ERROR_NAME_NOT_ALLOWED[1].encode()
+            errs.info = ERROR_NAME_NOT_ALLOWED[1]
             logging.info(f'Credential {Name.to_str(credential_name)} is not allowed in trust model')
-            return cert_state, None, errs
+            return cert_state, errs
         else:
-            secret = os.urandom(16)
+            nonce = os.urandom(16)
             cert_state.status = STATUS_CHALLENGE
-            cert_state.auth_status = CHALLENGE_STATUS_NEED_PROOF
-            param_secret = Parameter()
-            param_secret.key = CHALLENGE_POSS_PARAMETER_KEY_NONCE.encode()
-            param_secret.value = secret
-            cert_state.parameters.append(param_secret)
-            self._param_cache[CHALLENGE_POSS_PARAMETER_KEY_NONCE] = secret
-            return cert_state, {CHALLENGE_POSS_PARAMETER_KEY_NONCE: secret}, None
+            cert_state.challenge_status = CHALLENGE_STATUS_NEED_PROOF
+            cert_state.put_parameter(CHALLENGE_POSS_PARAMETER_KEY_NONCE, nonce)
+            return cert_state, None
 
-    async def actions_continue_challenge(self, cert_state: CertState, params_in: Dict) -> Tuple[CertState, Dict, ErrorMessage]:
-        if CHALLENGE_POSS_PARAMETER_KEY_PROOF in params_in:
-            param_proof = Parameter()
-            param_proof.key = CHALLENGE_POSS_PARAMETER_KEY_PROOF.encode()
-            param_proof.value = params_in[CHALLENGE_POSS_PARAMETER_KEY_PROOF]
-            cert_state.parameters.append(param_proof)
-            # verify signaure
-            credential = parse_certificate(cert_state.auth_value)
-            pub_key = ECC.import_key(credential.content)
-            
-            secret = self._param_cache[CHALLENGE_POSS_PARAMETER_KEY_NONCE]
-            if self._verify_raw_ecdsa(pub_key, secret, bytes(param_proof.value)):
-                logging.info(f'Identity verification succeed, should issue certificate')
-                cert_state.status = STATUS_SUCCESS
-                return cert_state, None, None
-            else:
-                errs = ErrorMessage()
-                errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
-                errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1].encode()
-                logging.info(f'Identity verification failed, returning errors '
-                             f'{ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
-                return cert_state, None, errs
+    async def actions_continue_challenge(self, cert_state: CertState) -> Tuple[CertState, ErrorMessage]:
+        proof = cert_state.get_parameter('proof')
+        nonce = cert_state.get_parameter('nonce')
+        issued_cert_buf = cert_state.get_parameter('issued-cert')
+        # verify signaure
+        credential = parse_certificate(issued_cert_buf)
+        pub_key = load_der_public_key(bytes(credential.content))
+        if self._verify_raw_signature(pub_key, nonce, proof):
+            logging.info(f'Identity verification succeed, should issue certificate')
+            cert_state.status = STATUS_SUCCESS
+            return cert_state, None
         else:
             cert_state.status = STATUS_FAILURE
-            return cert_state, None, errs
+            errs = ErrorMessage()
+            errs.code = ERROR_BAD_RAN_OUT_OF_TRIES[0]
+            errs.info = ERROR_BAD_RAN_OUT_OF_TRIES[1]
+            logging.info(f'Identity verification failed, returning errors '
+                            f'{ERROR_BAD_RAN_OUT_OF_TRIES[1]}')
+            return cert_state, errs
+
+    async def process(self, cert_state: CertState) -> Tuple[CertState, ErrorMessage]:
+        if cert_state.status == STATUS_BEFORE_CHALLENGE:
+            return await self.actions_before_challenge(cert_state)
+        elif cert_state.status == STATUS_CHALLENGE:
+            return await self.actions_continue_challenge(cert_state)
+        else:
+            raise Exception('Unexpected certification status')
