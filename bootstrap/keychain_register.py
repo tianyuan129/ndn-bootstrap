@@ -19,11 +19,10 @@ import logging
 from ndn.app import NDNApp
 from ndn.encoding import Name, FormalName, InterestParam
 from ndn.app_support.security_v2 import KEY_COMPONENT
-from ndn.security import AbstractIdentity, Keychain
+from ndn.security import Keychain
 
 class KcHandler:
-    ident: AbstractIdentity
-    def __init__(self, app: NDNApp, ident: AbstractIdentity):
+    def __init__(self, app: NDNApp, ident):
         self.ident = ident
         self.app = app
 

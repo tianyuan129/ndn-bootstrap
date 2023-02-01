@@ -1,10 +1,8 @@
-from time import sleep
 from datetime import datetime
 from ndn.app import NDNApp
-from ndn.encoding import Name, NonStrictName
-from ndn.security import TpmFile, KeychainSqlite3
+from ndn.security import KeychainSqlite3
 from ndn.app_support.security_v2 import parse_certificate, derive_cert
-from ndn.app_support.light_versec import compile_lvs, Checker, DEFAULT_USER_FNS, lvs_validator
+from ndn.app_support.light_versec import Checker, lvs_validator
 
 from ..ndnauth.app.name_aa import NameAuthAssign
 from ..ndncert.app.cert_issuer import CertIssuer

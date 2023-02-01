@@ -1,7 +1,6 @@
 import logging
-from time import sleep
 
-from ndn.encoding import Name, VarBinaryStr, InterestParam, NonStrictName
+from ndn.encoding import Name, InterestParam, NonStrictName
 from ndn.app import NDNApp, Validator
 from ndn.security import KeychainSqlite3
 from ndn.app_support.security_v2 import parse_certificate
@@ -9,7 +8,7 @@ from ndn.app_support.light_versec import Checker
 
 from ..ndnauth.app.name_requester import NameRequster
 from ..ndncert.app.cert_requester import CertRequester
-from ..types import Prover, ProtoError
+from ..types import Prover
 
 class Entity(object):
     def __init__(self, app: NDNApp, keychain: KeychainSqlite3, checker: Checker, validator: Validator):

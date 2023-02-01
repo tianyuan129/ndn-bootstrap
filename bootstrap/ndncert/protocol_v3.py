@@ -1,4 +1,4 @@
-from ndn.encoding import TlvModel, BytesField, UintField, RepeatedField, TypeNumber, ModelField, NameField
+from ndn.encoding import TlvModel, BytesField, UintField, RepeatedField, TypeNumber
 
 TLV_ECDH_PUB_TYPE = 145
 TLV_CERT_REQUEST_TYPE = 147

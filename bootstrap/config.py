@@ -1,5 +1,4 @@
 import yaml
-from pkg_resources import resource_filename
 
 
 def get_yaml(path):

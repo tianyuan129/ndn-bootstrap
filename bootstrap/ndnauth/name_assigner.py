@@ -1,4 +1,3 @@
-from typing import Dict
 from abc import ABC, abstractmethod
 from cryptography import x509
 

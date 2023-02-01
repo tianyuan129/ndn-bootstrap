@@ -1,5 +1,4 @@
 from .protocol import *
-from abc import abstractmethod
     
 class AuthState(TlvModel):
     nonce = BytesField(1) # this should be the primary key

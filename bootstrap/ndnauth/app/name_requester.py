@@ -2,7 +2,6 @@ from typing import Tuple, Optional
 import logging, sys
 
 from Cryptodome.PublicKey import ECC
-from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa, ec, utils
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
 from cryptography.hazmat.primitives.hashes import SHA256, Hash

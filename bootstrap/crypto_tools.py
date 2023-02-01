@@ -1,6 +1,5 @@
 from os import urandom
 from math import floor
-from ndn.security import verify_ecdsa
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec

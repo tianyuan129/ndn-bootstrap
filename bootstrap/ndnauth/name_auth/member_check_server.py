@@ -1,6 +1,6 @@
 from typing import Dict, List
 import logging, pem
-from OpenSSL.crypto import X509, X509Store, X509StoreContext, X509StoreContextError, load_certificate, FILETYPE_PEM
+from OpenSSL.crypto import X509Store, X509StoreContext, X509StoreContextError, load_certificate, FILETYPE_PEM
 
 from ..protocol import *
 from ...crypto_tools import *

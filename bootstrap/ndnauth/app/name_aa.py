@@ -1,7 +1,6 @@
-from typing import Optional, Dict, Coroutine
+from typing import Optional, Dict
 
 import logging, sys, time
-from os import urandom
 import asyncio
 from datetime import datetime
 
@@ -17,8 +16,8 @@ from ..name_auth import *
 from ..name_assigner import *
 from ..auth_state import *
 from ..mode_encoder import *
-from ...keychain_register import attach_keychain_register_appv1
 from ...types import NameAssignFunc
+
 _POSITION_NONCE_IN_BOOT_NOTIFICATION = -3
 _POSITION_NONCE_IN_PROOF_NOTIFICATION = -2
 

@@ -1,4 +1,4 @@
-from ndn.encoding import TlvModel, BytesField, UintField, RepeatedField, TypeNumber, ModelField
+from ndn.encoding import TlvModel, BytesField, UintField, ModelField
 from ..crypto_tools import EncryptedMessage
 
 # ApplicationParameters = APPLICATION-PARAMETERS-TYPE TLV-LENGTH

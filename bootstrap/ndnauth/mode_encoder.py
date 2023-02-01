@@ -1,9 +1,7 @@
-from typing import Dict
 from abc import abstractmethod
 import logging
 
-from ndn.encoding import Component, Name
-from ndn.app_support.security_v2 import parse_certificate, KEY_COMPONENT, derive_cert
+from ndn.app_support.security_v2 import parse_certificate
 
 from .protocol import *
 from .auth_state import *
