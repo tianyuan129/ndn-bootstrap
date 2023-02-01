@@ -23,25 +23,24 @@ pib_path = os.path.join(basedir, 'details/ndnkeys/.ndn/pib.db')
 KeychainSqlite3.initialize(pib_path, 'tpm-file', tpm_path)
 keychain = KeychainSqlite3(pib_path, tpm)
 try:
-    trust_anchor_data = keychain['/ndn/site1'].default_key().default_cert().data
+    trust_anchor_data = keychain['/hydra'].default_key().default_cert().data
     trust_anchor_name = parse_certificate(trust_anchor_data).name
 except:
     raise Exception('No trust anchor available')
 
 lvs_text = '''
 #KEY: "KEY"/_/_/_
-#site: "ndn"/"site1"
+#site: "hydra"
 #root: #site/#KEY
 #auth_signer: #site/"auth-signer"/#KEY <= #root
 #cert_signer: #site/"cert-signer"/#KEY <= #root
 #BootResponse: #site/"NAA"/"BOOT"/nonce/NOTIFY/_ <= #auth_signer
 #IdProofResponse: #site/"NAA"/"PROOF"/nonce/NOTIFY <= #auth_signer
-#proof_of_possession1: "32=authenticate"/_/_/_/_/_/_/#KEY <= #auth_signer
-#proof_of_possession2: "32=authenticate"/_/_/_/_/_/#KEY <= #auth_signer
-#proof_of_possession3: "32=authenticate"/_/_/_/_/#KEY <= #auth_signer
-#proof_of_possession4: "32=authenticate"/_/_/_/#KEY <= #auth_signer
-#proof_of_possession5: "32=authenticate"/_/_/#KEY <= #auth_signer
-#proof_of_possession6: "32=authenticate"/_/#KEY <= #auth_signer
+#proof_of_possession5: "32=authenticate"/#site/_/_/_/_/_/#KEY <= #auth_signer
+#proof_of_possession4: "32=authenticate"/#site/_/_/_/_/#KEY <= #auth_signer
+#proof_of_possession3: "32=authenticate"/#site/_/_/_/#KEY <= #auth_signer
+#proof_of_possession2: "32=authenticate"/#site/_/_/#KEY <= #auth_signer
+#proof_of_possession1: "32=authenticate"/#site/_/#KEY <= #auth_signer
 #NewResponse: #site/"CA"/"NEW"/_ <= #cert_signer
 #ChallengeResponse: #site/"CA"/"CHALLENGE"/_/_ <= #cert_signer
 #Entity5: #site/_/_/_/_/_/#KEY <= #cert_signer
@@ -55,14 +54,14 @@ async def run():
     checker = Checker(lvs_model, DEFAULT_USER_FNS)
     entity = Entity(app, keychain, checker, lvs_validator(checker, app, trust_anchor_data))
     # user authentication and certification
-    await entity.get_user_certified('/ndn/site1', '/alice', None, 
+    await entity.get_user_certified('/hydra', '/alice', None, 
         'tianyuan@cs.ucla.edu', lambda _ : input("Please enter the email verification code: ")
     )
     
     # server authentication and certification
     x509_chain_file = open('examples/details/alice-ndn-cert.pem')
     x509_prvkey_file = open('examples/details/alice-ndn-privkey.pem')
-    await entity.get_server_certified('/ndn/site1', '/alice', None,
+    await entity.get_server_certified('/hydra', '/alice', None,
         bytes(x509_chain_file.read(), 'utf-8'), 
         bytes(x509_prvkey_file.read(), 'utf-8')
     )

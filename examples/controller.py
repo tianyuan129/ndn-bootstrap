@@ -9,7 +9,7 @@ from bootstrap.keychain_register import attach_keychain_register_appv1
 
 logging.basicConfig(format='[{asctime}]{levelname}:{message}',
                     # datefmt='%Y-%m-%d %H:%M:%S',
-                    level=logging.INFO,
+                    level=logging.DEBUG,
                     style='{')
 
 
@@ -23,7 +23,7 @@ keychain = KeychainSqlite3(pib_path, tpm)
 
 lvs_text = '''
 #KEY: "KEY"/_/_/_
-#site: "ndn"/"site1"
+#site: "hydra"
 #root: #site/#KEY
 #auth_signer: #site/"auth-signer"/#KEY <= #root
 #cert_signer: #site/"cert-signer"/#KEY <= #root
@@ -49,10 +49,10 @@ def user_assign(email_str: str) -> FormalName:
     user_part = email_str[:index]
     domain_part = email_str[index + 1:]
     domain_comps = [Component.from_str(seg) for seg in domain_part.rsplit('.')]
-    return Name.from_str('/ndn/site1') + [Component.from_str(user_part)] + domain_comps
+    return Name.from_str('/hydra/32=nodes') + [Component.from_str(user_part)] + domain_comps
 
 def server_assign(common_name: str) -> FormalName:
-    return Name.from_str('/ndn/site1/' + common_name)
+    return Name.from_str('/hydra/32=user/' + common_name)
     
 config_path = os.path.join(basedir, 'controller.conf')
 controller = Controller(app, config_path, keychain, Checker(lvs_model, DEFAULT_USER_FNS))

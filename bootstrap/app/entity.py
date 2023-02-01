@@ -20,7 +20,7 @@ class Entity(object):
         self.name_requester = NameRequster(self.app, self.validator)
         self.cert_requester = CertRequester(self.app, self.checker, self.validator)
     
-    async def certify(self, pop_wire, signer):
+    async def certify(self, controller_prefix, pop_wire, signer):
         pop_data = parse_certificate(pop_wire)
         assigned_keyname = pop_data.name[:-2]
         assigned_name = assigned_keyname[1:-2]
@@ -40,7 +40,7 @@ class Entity(object):
         csr_name = parse_certificate(csr_data).name
         issued_cert_name, forwarding_hint = \
             await self.cert_requester.request_signing_with_possession(
-                '/ndn/site1', csr_data, self.tpm.get_signer(csr_name[:-2], csr_name),
+                controller_prefix, csr_data, self.tpm.get_signer(csr_name[:-2], csr_name),
                 pop_wire, pop_prover
             )
         interest_param = InterestParam()
@@ -59,7 +59,7 @@ class Entity(object):
         pop_wire, signer = await self.name_requester.authenticate_user(
             controller_prefix, local_prefix, local_forwarder, email, prover
         )
-        await self.certify(pop_wire, signer)
+        await self.certify(controller_prefix, pop_wire, signer)
         
     async def get_server_certified(self, controller_prefix: NonStrictName, local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
                                    x509_chain: bytes, x509_prv_key: bytes):
@@ -67,4 +67,4 @@ class Entity(object):
         pop_wire, signer = await self.name_requester.authenticate_server(
             controller_prefix, local_prefix, local_forwarder, x509_chain, x509_prv_key
         )
-        await self.certify(pop_wire, signer)
+        await self.certify(controller_prefix, pop_wire, signer)
