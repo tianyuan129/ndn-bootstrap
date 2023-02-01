@@ -7,7 +7,7 @@ ndn-bootstrap
 
 A Bootstrapping Tool for Named Data Networking, based on python-ndn_
 
-It supports Python >=3.9 and PyPy3.9 >=7.3.8.
+It supports Python >=3.10.
 
 Please see our documentation_ if you have any issues.
 
