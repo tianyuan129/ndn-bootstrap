@@ -56,7 +56,7 @@ async def run():
     entity = Entity(app, keychain, checker, lvs_validator(checker, app, trust_anchor_data))
     # user authentication and certification
     await entity.get_user_certified('/ndn/site1', '/alice', None, 
-        'tianyuan@cs.ucla.edu', lambda _ : '1234'
+        'tianyuan@cs.ucla.edu', lambda _ : input("Please enter the email verification code: ")
     )
     
     # server authentication and certification

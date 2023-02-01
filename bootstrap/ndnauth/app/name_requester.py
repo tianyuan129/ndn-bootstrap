@@ -64,9 +64,10 @@ class NameRequster(object):
         # /<local-prefix>/NAA/PROOF/<nonce>/MSG
         idproof_params_name = Name.from_str(local_prefix + '/NAA/PROOF') \
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
+        proof = prover(boot_parse_ret)
         @self.app.route(idproof_params_name)
         def _on_idproof_params_interest(name: FormalName, _params: InterestParam, _app_param: Optional[BinaryStr] | None):
-            self.app.put_data(name, encoder.prepare_idproof_params(proof=prover(boot_parse_ret)),
+            self.app.put_data(name, encoder.prepare_idproof_params(proof=proof),
                               freshness_period = 10000, signer = kwargs['signer'])
         # /<controller-prefix>/NAA/PROOF/<nonce>/NOTIFY/<ParametersSha256Digest>
         interest_name = Name.from_str(controller_prefix + '/NAA/PROOF') \

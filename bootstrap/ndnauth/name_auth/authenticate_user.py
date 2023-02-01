@@ -27,7 +27,7 @@ class UserAuthenticator(Authenticator):
         
         if self.config['email_template'] == 'template_default.conf':
             dirname = os.path.dirname(__file__)
-            self.config['email_template'] = os.path.join(dirname, 'template_default.conf')       
+            self.config['email_template'] = os.path.join(dirname, 'template_default.conf')
         confParser.read(self.config['email_template'])
 
         # read smtp settings
@@ -75,8 +75,8 @@ class UserAuthenticator(Authenticator):
         for i in range(PINCODE_SIZE):
             secret += str(randint(0,9))
         logging.info(f'Secret for Request ID {auth_state.nonce} is {secret}')
-        # self.email_sender(email, secret)
-        auth_state.plaintext_code = '1234'.encode()
+        self.email_sender(email, secret)
+        auth_state.plaintext_code = secret.encode()
         return auth_state
 
     async def after_receive_idproof_params(self, auth_state: AuthStateUser) -> AuthStateUser:
