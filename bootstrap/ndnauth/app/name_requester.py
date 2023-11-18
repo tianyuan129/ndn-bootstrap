@@ -63,7 +63,7 @@ class NameRequster(object):
         # /<local-prefix>/NAA/PROOF/<nonce>/MSG
         idproof_params_name = Name.from_str(local_prefix + '/NAA/PROOF') \
             + [Component.from_number(nonce, Component.TYPE_GENERIC), Component.from_str('MSG')]
-        proof = prover(boot_parse_ret)
+        proof = await prover(boot_parse_ret)
         @self.app.route(idproof_params_name)
         def _on_idproof_params_interest(name: FormalName, _params: InterestParam, _app_param: Optional[BinaryStr] | None):
             self.app.put_data(name, encoder.prepare_idproof_params(proof=proof),
@@ -139,4 +139,21 @@ class NameRequster(object):
         pop_buf = await self.authenticate_base(nonce, controller_prefix, local_prefix, 
                                                local_forwarder, 'server', prover,
                                                x509_chain=x509_chain, signer = signer)
+        return pop_buf, signer
+    
+    async def authenticate_oidc(self, controller_prefix: NonStrictName,
+                                local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
+                                oidc_user: str, oidc_provider: str, prover: Prover) -> Tuple[VarBinaryStr, Sha256WithEcdsaSigner]:
+        # create a key pair first
+        nonce = gen_nonce_64()
+        pri_key = ECC.generate(curve=f'P-256')
+        pub_key = bytes(pri_key.public_key().export_key(format='DER'))
+        key_der = pri_key.export_key(format='DER', use_pkcs8=False)
+        # create a dummy signer
+        tmpkey_name = Name.from_str(local_prefix) + [KEY_COMPONENT, Component.from_number(nonce, Component.TYPE_GENERIC)]
+        signer = Sha256WithEcdsaSigner(tmpkey_name, key_der)
+        _, csr_buf = self_sign(tmpkey_name, pub_key, signer)
+        pop_buf = await self.authenticate_base(nonce, controller_prefix, local_prefix, 
+                                               local_forwarder, 'oidc', prover,
+                                               oidc_user=oidc_user, oidc_provider=oidc_provider, csr=csr_buf, signer = signer)
         return pop_buf, signer

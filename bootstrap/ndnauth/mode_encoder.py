@@ -10,7 +10,8 @@ from ..crypto_tools import *
 def find_encoder(tlv_type):
     _encoders = {
                     TLV_BOOT_PARAMS_RES_USER_TYPE: 'UserModeEncoder',
-                    TLV_BOOT_PARAMS_RES_SERVER_TYPE: 'ServerModeEncoder'
+                    TLV_BOOT_PARAMS_RES_SERVER_TYPE: 'ServerModeEncoder',
+                    TLV_BOOT_PARAMS_RES_OIDC_TYPE: 'OidcModeEncoder'
                 }
     return _encoders[tlv_type]
 
@@ -153,6 +154,56 @@ class ServerModeEncoder(ModeEncoder):
     def parse_idproof_params(self, content):
         idproof_params = IdProofParamsServer.parse(content)
         self.auth_state.signed_rand = idproof_params.signed_rand
+    
+    def parse_idproof_response(self, content):
+        idproof_response = IdProofResponse.parse(content)
+        self.auth_state.proof_of_possess = idproof_response.proof_of_possess
+
+class OidcModeEncoder(ModeEncoder):
+    def __init__(self, nonce):
+        self.auth_state = AuthStateOidc()
+        self.auth_state.nonce = nonce
+        pass
+
+    def parse_boot_params(self, content):
+        boot_params = BootParamsResponseOidc.parse(content)
+        self.auth_state.oidc_user = boot_params.inner.oidc_user
+        self.auth_state.oidc_provider = boot_params.inner.oidc_provider
+        self.auth_state.pub_key = parse_certificate(boot_params.inner.cert_request).content
+
+    def prepare_boot_params(self, **kwargs):
+        boot_params_inner = BootParamsResponseOidcInner()
+        boot_params = BootParamsResponseOidc()
+        boot_params_inner.oidc_user = kwargs['oidc_user']
+        boot_params_inner.oidc_provider = kwargs['oidc_provider']
+        boot_params_inner.cert_request = kwargs['csr']
+        boot_params.inner = boot_params_inner
+        return boot_params.encode()
+    
+    def parse_boot_response(self, content):
+        boot_response = BootResponseOidc.parse(content)
+        self.auth_state.oidc_auth_uri = boot_response.oidc_auth_uri
+        return self.auth_state.oidc_auth_uri
+
+    def prepare_boot_response(self, **kwargs):
+        boot_response = BootResponseOidc()
+        boot_response.oidc_auth_uri = self.auth_state.oidc_auth_uri
+        print(self.auth_state.oidc_auth_uri)
+        return boot_response.encode()
+    
+    def prepare_idproof_params(self, **kwargs):
+        idproof_params = IdProofParamsOidc()
+        idproof_params.oidc_id_token = kwargs['proof']
+        return idproof_params.encode()
+
+    def prepare_idproof_response(self, **kwargs):
+        idproof_response = IdProofResponse()
+        idproof_response.proof_of_possess = kwargs['proof_of_possess']
+        return idproof_response.encode()
+    
+    def parse_idproof_params(self, content):
+        idproof_params = IdProofParamsOidc.parse(content)
+        self.auth_state.oidc_id_token = idproof_params.oidc_id_token
     
     def parse_idproof_response(self, content):
         idproof_response = IdProofResponse.parse(content)

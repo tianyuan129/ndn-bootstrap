@@ -34,3 +34,7 @@ class ServerNameAssigner(NameAssigner):
 class UserNameAssigner(NameAssigner):
     def preprocess(self, auth_state: AuthState) -> str:
         return bytes(auth_state.email).decode('utf-8')
+    
+class OidcNameAssigner(NameAssigner):
+    def preprocess(self, auth_state: AuthState) -> str:
+        return bytes(auth_state.oidc_user).decode('utf-8')

@@ -123,14 +123,15 @@ class NameAuthAssign(object):
         self.entities_cache[nonce] |= {'encoder': encoder, 'encoder_type': encoder_type_str}
         
         # parsing boot params and preparing response
-        try:
-            encoder.parse_boot_params(content)
-        except:
-            errs = ErrorMessage()
-            errs.code = ERROR_BAD_RESPONSE_FORMAT[0]
-            errs.info = ERROR_BAD_RESPONSE_FORMAT[1].encode()
-            self._return_err_msg(name, errs)
-            return            
+        # try:
+        encoder.parse_boot_params(content)
+        # except:
+        #     print('here')
+        #     errs = ErrorMessage()
+        #     errs.code = ERROR_BAD_RESPONSE_FORMAT[0]
+        #     errs.info = ERROR_BAD_RESPONSE_FORMAT[1].encode()
+        #     self._return_err_msg(name, errs)
+        #     return            
         
         auth_type_str = encoder_type_str[:encoder_type_str.find('ModeEncoder')]
         membership_checker = self.membership_checkers[auth_type_str]

@@ -60,7 +60,15 @@ class Entity(object):
             controller_prefix, local_prefix, local_forwarder, email, prover
         )
         await self.certify(controller_prefix, pop_wire, signer)
-        
+
+    async def get_oidc_certified(self, controller_prefix: NonStrictName, local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
+                                 oidc_user: str, oidc_provider: str, prover: Prover):
+        logging.info(f'Start authentication...')
+        pop_wire, signer = await self.name_requester.authenticate_oidc(
+            controller_prefix, local_prefix, local_forwarder, oidc_user, oidc_provider, prover
+        )
+        await self.certify(controller_prefix, pop_wire, signer)
+
     async def get_server_certified(self, controller_prefix: NonStrictName, local_prefix: NonStrictName, local_forwarder: NonStrictName | None,
                                    x509_chain: bytes, x509_prv_key: bytes):
         logging.info(f'Start authentication...')

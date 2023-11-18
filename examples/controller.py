@@ -59,6 +59,8 @@ controller = Controller(app, config_path, keychain, Checker(lvs_model, DEFAULT_U
 attach_keychain_register_appv1(keychain, app)
 controller.load_name_assignment('user', user_assign)
 controller.load_name_assignment('server', server_assign)
+controller.load_name_assignment('oidc', user_assign)
+
 def main () -> int:
     app.run_forever(after_start=controller.route())
     return 0

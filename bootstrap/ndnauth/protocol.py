@@ -116,6 +116,19 @@ TLV_BOOT_PARAMS_RES_USER_TYPE = 201
 class BootParamsResponseUser(TlvModel):
     inner = ModelField(TLV_BOOT_PARAMS_RES_USER_TYPE, BootParamsResponseUserInner)
 
+TLV_OIDC_USER_TYPE = 175
+TLV_OIDC_PROVIDER_TYPE = 177
+TLV_CERT_REQUEST_TYPE = 137
+class BootParamsResponseOidcInner(TlvModel):
+    oidc_user = BytesField(TLV_OIDC_USER_TYPE)
+    oidc_provider = BytesField(TLV_OIDC_PROVIDER_TYPE)
+    cert_request = BytesField(TLV_CERT_REQUEST_TYPE)
+
+TLV_BOOT_PARAMS_RES_OIDC_TYPE = 301
+class BootParamsResponseOidc(TlvModel):
+    inner = ModelField(TLV_BOOT_PARAMS_RES_OIDC_TYPE, BootParamsResponseOidcInner)
+
+
 TLV_X509_CHAIN_TYPE = 139
 class BootParamsResponseServerInner(TlvModel):
     x509_chain = BytesField(TLV_X509_CHAIN_TYPE)
@@ -128,6 +141,14 @@ TLV_SALT_TYPE = 141
 class BootResponseUser(TlvModel):
     ecdh_pub = BytesField(TLV_ECDB_PUB_TYPE)
     salt = BytesField(TLV_SALT_TYPE)
+
+TLV_OIDC_AUTH_URI_TYPE = 179
+class BootResponseOidc(TlvModel):
+    oidc_auth_uri = BytesField(TLV_OIDC_AUTH_URI_TYPE)
+
+TLV_OIDC_TOKEN_TYPE = 181
+class IdProofParamsOidc(TlvModel):
+    oidc_id_token = BytesField(TLV_OIDC_TOKEN_TYPE)
 
 TLV_RAND_TYPE = 143
 class BootResponseServer(TlvModel):
